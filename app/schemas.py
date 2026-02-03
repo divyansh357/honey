@@ -1,6 +1,6 @@
 # app/schemas.py
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import Any, Optional, List, Dict
 
 class Message(BaseModel):
     sender: str
@@ -13,10 +13,10 @@ class Metadata(BaseModel):
     locale: Optional[str] = None
 
 class IncomingRequest(BaseModel):
-    sessionId: str
-    message: Message
-    conversationHistory: Optional[List[Message]] = None
-    metadata: Optional[Metadata] = None
+    sessionId: Optional[str] = None
+    message: Optional[Any] = None
+    conversationHistory: Optional[Any] = None
+    metadata: Optional[Any] = None
 
 
 class EngagementMetrics(BaseModel):

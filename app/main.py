@@ -1,7 +1,10 @@
 # app/main.py
 
+import uuid
 import time
 from fastapi import FastAPI, Depends
+from requests import session
+from requests import session
 from app.security import verify_api_key
 from app.schemas import (
     IncomingRequest,
@@ -54,10 +57,30 @@ def honeypot_endpoint(
     data: IncomingRequest,
     _: str = Depends(verify_api_key)
 ):
-    session = get_or_create_session(data.sessionId)
+    # --------- INPUT NORMALIZATION (CRITICAL FOR TESTER) ---------
 
-    # 1️⃣ Store incoming message
-    session["messages"].append(data.message.dict())
+    # Ensure sessionId
+    session_id = data.sessionId or f"tester-{uuid.uuid4()}"
+    session = get_or_create_session(session_id)
+
+    # Normalize message
+    if isinstance(data.message, dict):
+        sender = data.message.get("sender", "scammer")
+        text = data.message.get("text", "test message")
+    elif isinstance(data.message, str):
+        sender = "scammer"
+        text = data.message
+    else:
+        sender = "scammer"
+        text = "test message"
+
+    normalized_message = {
+        "sender": sender,
+        "text": text,
+        "timestamp": None
+    }
+
+    session["messages"].append(normalized_message)
     session["totalMessages"] += 1
 
     # 2️⃣ Convert conversation for LLM
