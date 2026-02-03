@@ -13,10 +13,6 @@ def send_final_callback(session_id: str, session_data: dict):
         'agentNotes': session_data.get("lastAgentReply", "")
     }
 
-    print("==== GUVI CALLBACK PAYLOAD ====")
-    print(payload)
-    print("================================")
-
     try:
         response = requests.post(
             GUVI_CALLBACK_URL,
