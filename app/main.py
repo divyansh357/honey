@@ -111,6 +111,12 @@ def honeypot_endpoint(
 
     duration = int(time.time() - session["startTime"])
 
+    filtered_intelligence = {
+        "bankAccounts": session["intelligence"]["bankAccounts"],
+        "upiIds": session["intelligence"]["upiIds"],
+        "phishingLinks": session["intelligence"]["phishingLinks"]
+    }
+
     return ApiResponse(
         status="success",
         scamDetected=session["scamDetected"],
@@ -119,7 +125,7 @@ def honeypot_endpoint(
             totalMessagesExchanged=session["totalMessages"]
         ),
         extractedIntelligence=ExtractedIntelligence(
-            **session["intelligence"]
+            **filtered_intelligence
         ),
         agentNotes=agent_reply or "Monitoring conversation"
     )

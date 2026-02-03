@@ -27,8 +27,6 @@ class ExtractedIntelligence(BaseModel):
     bankAccounts: List[str] = []
     upiIds: List[str] = []
     phishingLinks: List[str] = []
-    phoneNumbers: List[str] = []
-    suspiciousKeywords: List[str] = []
 
 class ApiResponse(BaseModel):
     status: str
