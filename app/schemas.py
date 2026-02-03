@@ -5,7 +5,7 @@ from typing import List, Optional
 class Message(BaseModel):
     sender: str
     text: str
-    timestamp: str
+    timestamp: Optional[str] = None
 
 class Metadata(BaseModel):
     channel: Optional[str] = None
@@ -15,7 +15,7 @@ class Metadata(BaseModel):
 class IncomingRequest(BaseModel):
     sessionId: str
     message: Message
-    conversationHistory: Optional[List[Message]] = []
+    conversationHistory: Optional[List[Message]] = None
     metadata: Optional[Metadata] = None
 
 
