@@ -92,6 +92,8 @@ def honeypot_endpoint(
     if session["scamDetected"]:
         agent_reply = generate_agent_reply(conversation_text)
         session["agentActive"] = True
+        session["lastAgentReply"] = agent_reply
+
 
     # Intelligence extraction (ONLY from normalized message)
     if sender == "scammer":

@@ -10,8 +10,12 @@ def send_final_callback(session_id: str, session_data: dict):
         "scamDetected": session_data["scamDetected"],
         "totalMessagesExchanged": session_data["totalMessages"],
         "extractedIntelligence": session_data["intelligence"],
-        "agentNotes": "Scammer used urgency and payment redirection tactics"
+        'agentNotes': session_data.get("lastAgentReply", "")
     }
+
+    print("==== GUVI CALLBACK PAYLOAD ====")
+    print(payload)
+    print("================================")
 
     try:
         response = requests.post(
