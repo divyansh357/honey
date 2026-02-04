@@ -5,8 +5,8 @@ import uuid
 from fastapi import FastAPI, Depends
 from app.security import verify_api_key
 from app.schemas import (
+    AgentReply,
     IncomingRequest,
-    ApiResponse,
     EngagementMetrics,
     ExtractedIntelligence
 )
@@ -46,7 +46,7 @@ def should_close_session(session: dict) -> bool:
 
 # ---------- API ----------
 
-@app.post("/honeypot", response_model=ApiResponse)
+@app.post("/honeypot", response_model=AgentReply)
 def honeypot_endpoint(
     data: IncomingRequest,
     _: str = Depends(verify_api_key)
@@ -119,15 +119,8 @@ def honeypot_endpoint(
         "phishingLinks": session["intelligence"]["phishingLinks"]
     }
 
-    return ApiResponse(
+    return AgentReply(
         status="success",
-        scamDetected=session["scamDetected"],
-        engagementMetrics=EngagementMetrics(
-            engagementDurationSeconds=duration,
-            totalMessagesExchanged=session["totalMessages"]
-        ),
-        extractedIntelligence=ExtractedIntelligence(
-            **filtered_intelligence
-        ),
-        agentNotes=agent_reply or "Monitoring conversation"
+        reply=agent_reply or "I'm not sure I understand. Could you explain?"
     )
+

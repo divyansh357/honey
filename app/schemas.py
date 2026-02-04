@@ -28,9 +28,13 @@ class ExtractedIntelligence(BaseModel):
     upiIds: List[str] = []
     phishingLinks: List[str] = []
 
-class ApiResponse(BaseModel):
+# class ApiResponse(BaseModel):
+#     status: str
+#     scamDetected: bool
+#     engagementMetrics: EngagementMetrics
+#     extractedIntelligence: ExtractedIntelligence
+#     agentNotes: str
+
+class AgentReply(BaseModel):
     status: str
-    scamDetected: bool
-    engagementMetrics: EngagementMetrics
-    extractedIntelligence: ExtractedIntelligence
-    agentNotes: str
+    reply: str
