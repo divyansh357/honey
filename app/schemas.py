@@ -1,11 +1,11 @@
 # app/schemas.py
 from pydantic import BaseModel
-from typing import Any, Optional, List, Dict
+from typing import Any, Optional, List, Dict, Union
 
 class Message(BaseModel):
     sender: str
     text: str
-    timestamp: Optional[str] = None
+    timestamp: Optional[Union[int, str]] = None
 
 class Metadata(BaseModel):
     channel: Optional[str] = None
