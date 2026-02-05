@@ -32,16 +32,22 @@ def conversation_to_text(messages):
 
 
 def should_close_session(session: dict) -> bool:
+
     intel = session["intelligence"]
 
     has_payment_info = (
         len(intel["bankAccounts"]) > 0 or
         len(intel["upiIds"]) > 0 or
-        len(intel["phishingLinks"]) > 0
+        len(intel["phishingLinks"]) > 0 or
+        len(intel["phoneNumbers"]) > 0
     )
 
-    enough_turns = session["totalMessages"] >= 6
-    return has_payment_info and session["totalMessages"] >= 4
+    enough_turns = session["totalMessages"] >= 8
+
+    # CLOSE if either condition met
+    return has_payment_info or enough_turns
+
+
 
 # ---------- API ----------
 
@@ -115,7 +121,8 @@ def honeypot_endpoint(
     filtered_intelligence = {
         "bankAccounts": session["intelligence"]["bankAccounts"],
         "upiIds": session["intelligence"]["upiIds"],
-        "phishingLinks": session["intelligence"]["phishingLinks"]
+        "phishingLinks": session["intelligence"]["phishingLinks"],
+        "phoneNumbers": session["intelligence"]["phoneNumbers"]
     }
 
     return AgentReply(
