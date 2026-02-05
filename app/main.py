@@ -41,8 +41,7 @@ def should_close_session(session: dict) -> bool:
     )
 
     enough_turns = session["totalMessages"] >= 6
-    return has_payment_info or enough_turns
-
+    return has_payment_info and session["totalMessages"] >= 4
 
 # ---------- API ----------
 
