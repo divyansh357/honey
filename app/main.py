@@ -1,16 +1,9 @@
-# app/main.py
-
 import time
 import uuid
 from fastapi import FastAPI, Depends
 from app.security import verify_api_key
-from app.schemas import (
-    AgentReply,
-    IncomingRequest,
-    EngagementMetrics,
-    ExtractedIntelligence
-)
-from app.session_store import get_or_create_session
+from app.schemas import AgentReply, IncomingRequest
+from app.session_store import get_or_create_session, update_session
 from app.core.scam_detector import detect_scam
 from app.core.agent import generate_agent_reply
 from app.core.intelligence import extract_intelligence
@@ -31,22 +24,21 @@ def conversation_to_text(messages):
     )
 
 
-def should_close_session(session: dict) -> bool:
+def should_close_session(session: dict):
 
     intel = session["intelligence"]
 
     has_payment_info = (
-        len(intel["bankAccounts"]) > 0 or
-        len(intel["upiIds"]) > 0 or
-        len(intel["phishingLinks"]) > 0 or
-        len(intel["phoneNumbers"]) > 0
+        intel["bankAccounts"]
+        or intel["upiIds"]
+        or intel["phishingLinks"]
+        or intel["phoneNumbers"]
     )
 
     enough_turns = session["totalMessages"] >= 8
 
     # CLOSE if either condition met
-    return has_payment_info or enough_turns
-
+    return bool(has_payment_info) or enough_turns
 
 
 # ---------- API ----------
@@ -56,12 +48,12 @@ def honeypot_endpoint(
     data: IncomingRequest,
     _: str = Depends(verify_api_key)
 ):
-    # --------- INPUT NORMALIZATION (CRITICAL) ---------
 
     session_id = data.sessionId or f"tester-{uuid.uuid4()}"
     session = get_or_create_session(session_id)
 
-    # Normalize message safely
+    # ---------- NORMALIZE MESSAGE ----------
+
     if isinstance(data.message, dict):
         sender = data.message.get("sender", "scammer")
         text = data.message.get("text", "test message")
@@ -78,55 +70,56 @@ def honeypot_endpoint(
         "timestamp": None
     }
 
-    # --------- STORE MESSAGE ---------
+    # ---------- STORE MESSAGE ----------
 
     session["messages"].append(normalized_message)
     session["totalMessages"] += 1
 
-    # --------- PROCESS ---------
-
     conversation_text = conversation_to_text(session["messages"])
 
-    # Scam detection
+    # ---------- DETECT SCAM ----------
+
     if not session["scamDetected"]:
         result = detect_scam(conversation_text)
         session["scamDetected"] = result.get("scamDetected", False)
 
-    # Agent reply
+    # ---------- AGENT ----------
+
     agent_reply = ""
+
     if session["scamDetected"]:
         agent_reply = generate_agent_reply(conversation_text)
         session["agentActive"] = True
         session["lastAgentReply"] = agent_reply
 
+    # ---------- EXTRACTION ----------
 
-    # Intelligence extraction (ONLY from normalized message)
     if sender == "scammer":
         extracted = extract_intelligence(text)
+
         for key, values in extracted.items():
             for v in values:
                 if v not in session["intelligence"][key]:
                     session["intelligence"][key].append(v)
 
-    # Session closure & callback
-    if session["scamDetected"] and not session.get("closed", False):
-        if should_close_session(session):
-            send_final_callback(session_id, session)
-            session["closed"] = True
+    # ---------- SESSION CLOSURE ----------
 
-    # --------- RESPONSE ---------
+    if (
+        session["scamDetected"]
+        and not session.get("closed", False)
+        and should_close_session(session)
+    ):
+        send_final_callback(session_id, session)
 
-    duration = int(time.time() - session["startTime"])
+        session["closed"] = True
+        session["callbackSent"] = True
 
-    filtered_intelligence = {
-        "bankAccounts": session["intelligence"]["bankAccounts"],
-        "upiIds": session["intelligence"]["upiIds"],
-        "phishingLinks": session["intelligence"]["phishingLinks"],
-        "phoneNumbers": session["intelligence"]["phoneNumbers"]
-    }
+        update_session(session_id, session)  # SAVE IMMEDIATELY
+
+    # Always persist
+    update_session(session_id, session)
 
     return AgentReply(
         status="success",
-        reply=agent_reply or "I'm not sure I understand. Could you explain?"
+        reply=agent_reply or "Could you explain that again?"
     )
-

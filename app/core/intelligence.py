@@ -5,20 +5,22 @@ import re
 # STRONG REGEX PATTERNS
 # ==============================
 
-# UPI (covers most real-world formats)
-UPI_REGEX = re.compile(r"\b[a-zA-Z0-9._-]{2,}@[a-zA-Z]{2,}\b")
+# Covers most real-world UPI formats
+UPI_REGEX = re.compile(
+    r"\b[a-zA-Z0-9._-]{2,}@[a-zA-Z0-9.-]{2,}\b"
+)
 
-# URLs (safer than previous)
+# Catch http, https, AND www
 URL_REGEX = re.compile(
-    r"https?://(?:[-\w.]|(?:%[\da-fA-F]{2}))+[^\s]*"
+    r"\b(?:https?://|www\.)[^\s]+\b"
 )
 
-# Indian phone numbers
+# STRICT Indian phone detection
 PHONE_REGEX = re.compile(
-    r"(?:\+91[-\s]?|0)?[6-9]\d{9}"
+    r"\b(?:\+91[-\s]?|0)?([6-9]\d{9})\b"
 )
 
-# Bank / card / long numeric identifiers
+# Bank / card / long identifiers
 BANK_REGEX = re.compile(
     r"\b\d{10,18}\b"
 )
@@ -35,19 +37,17 @@ SUSPICIOUS_KEYWORDS = [
     "account",
     "upi",
     "otp",
-    "kyc"
+    "kyc",
+    "fraud",
+    "pin"
 ]
 
 
 # ==============================
-# TEXT CLEANING (VERY IMPORTANT)
+# TEXT CLEANING
 # ==============================
 
 def clean_scammer_text(text: str) -> str:
-    """
-    Removes LLM reasoning noise that evaluator simulators often leak.
-    Makes extraction MUCH more reliable.
-    """
 
     if not text:
         return ""
@@ -64,12 +64,11 @@ def clean_scammer_text(text: str) -> str:
         "according to policy"
     ]
 
-    # If reasoning text exists, try extracting quoted message
     if any(n in text for n in noise_phrases):
+
         quoted = re.findall(r'"([^"]+)"', text)
 
         if quoted:
-            # Return longest quoted chunk (usually the scam message)
             return max(quoted, key=len)
 
     return text
@@ -81,29 +80,23 @@ def clean_scammer_text(text: str) -> str:
 
 def extract_intelligence(text: str) -> dict:
 
-    # 🔥 ALWAYS CLEAN FIRST
     text = clean_scammer_text(text)
 
     if not text:
-        return {
-            "upiIds": [],
-            "phishingLinks": [],
-            "phoneNumbers": [],
-            "bankAccounts": [],
-            "suspiciousKeywords": []
-        }
+        return empty_intel()
 
     # ---------- PHONE ----------
-    raw_phones = set(PHONE_REGEX.findall(text))
+    raw_phones = PHONE_REGEX.findall(text)
 
     phones = set()
 
     for p in raw_phones:
+
         digits = re.sub(r"\D", "", p)
 
-        # Normalize to last 10 digits
-        if len(digits) >= 10:
-            phones.add(digits[-10:])
+        # STRICT: must be EXACTLY 10
+        if len(digits) == 10:
+            phones.add(digits)
 
     # ---------- BANK ----------
     raw_numbers = set(BANK_REGEX.findall(text))
@@ -114,21 +107,21 @@ def extract_intelligence(text: str) -> dict:
 
         digits = re.sub(r"\D", "", num)
 
-        # Skip if looks like phone
-        if digits[-10:] in phones:
+        # Skip if same as phone
+        if digits in phones:
             continue
 
-        # Ignore very repetitive garbage numbers
+        # Ignore garbage numbers
         if len(set(digits)) <= 2:
             continue
 
         banks.add(digits)
 
     # ---------- UPI ----------
-    upis = set(UPI_REGEX.findall(text))
+    upis = set(u.lower() for u in UPI_REGEX.findall(text))
 
     # ---------- URL ----------
-    urls = set(URL_REGEX.findall(text))
+    urls = set(u.lower() for u in URL_REGEX.findall(text))
 
     # ---------- KEYWORDS ----------
     lowered = text.lower()
@@ -138,11 +131,20 @@ def extract_intelligence(text: str) -> dict:
         if kw in lowered
     }
 
-    # Return deduplicated intelligence
     return {
         "upiIds": list(sorted(upis)),
         "phishingLinks": list(sorted(urls)),
         "phoneNumbers": list(sorted(phones)),
         "bankAccounts": list(sorted(banks)),
         "suspiciousKeywords": list(sorted(keywords))
+    }
+
+
+def empty_intel():
+    return {
+        "upiIds": [],
+        "phishingLinks": [],
+        "phoneNumbers": [],
+        "bankAccounts": [],
+        "suspiciousKeywords": []
     }
