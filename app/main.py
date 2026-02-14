@@ -52,28 +52,37 @@ def honeypot_endpoint(
     session_id = data.sessionId or f"tester-{uuid.uuid4()}"
     session = get_or_create_session(session_id)
 
-    # ---------- NORMALIZE MESSAGE ----------
+    # ---------- REBUILD SESSION FROM EVALUATOR HISTORY ----------
 
+    rebuilt_messages = []
+
+    # Add previous conversation history if provided
+    if isinstance(data.conversationHistory, list):
+        for msg in data.conversationHistory:
+            if isinstance(msg, dict):
+                rebuilt_messages.append({
+                    "sender": msg.get("sender", "unknown"),
+                    "text": msg.get("text", ""),
+                    "timestamp": msg.get("timestamp")
+                })
+
+    # Add current incoming message
     if isinstance(data.message, dict):
-        sender = data.message.get("sender", "scammer")
-        text = data.message.get("text", "test message")
-    elif isinstance(data.message, str):
-        sender = "scammer"
-        text = data.message
+        rebuilt_messages.append({
+            "sender": data.message.get("sender", "scammer"),
+            "text": data.message.get("text", ""),
+            "timestamp": data.message.get("timestamp")
+        })
     else:
-        sender = "scammer"
-        text = "test message"
+        rebuilt_messages.append({
+            "sender": "scammer",
+            "text": str(data.message),
+            "timestamp": None
+        })
 
-    normalized_message = {
-        "sender": sender,
-        "text": text,
-        "timestamp": None
-    }
-
-    # ---------- STORE MESSAGE ----------
-
-    session["messages"].append(normalized_message)
-    session["totalMessages"] += 1
+    # Replace session message history with evaluator truth
+    session["messages"] = rebuilt_messages
+    session["totalMessages"] = len(rebuilt_messages)
 
     conversation_text = conversation_to_text(session["messages"])
 
@@ -94,8 +103,11 @@ def honeypot_endpoint(
 
     # ---------- EXTRACTION ----------
 
-    if sender == "scammer":
-        extracted = extract_intelligence(text)
+    # Only extract from current incoming message
+    current_text = rebuilt_messages[-1]["text"]
+
+    if rebuilt_messages[-1]["sender"] == "scammer":
+        extracted = extract_intelligence(current_text)
 
         for key, values in extracted.items():
             for v in values:
@@ -109,14 +121,12 @@ def honeypot_endpoint(
         and not session.get("closed", False)
         and should_close_session(session)
     ):
-        send_final_callback(session_id, session)
+        success = send_final_callback(session_id, session)
 
-        session["closed"] = True
-        session["callbackSent"] = True
+        if success:
+            session["closed"] = True
+            session["callbackSent"] = True
 
-        update_session(session_id, session)  # SAVE IMMEDIATELY
-
-    # Always persist
     update_session(session_id, session)
 
     return AgentReply(
