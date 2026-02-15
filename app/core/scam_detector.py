@@ -1,5 +1,5 @@
 import json
-from app.llm.llm_client import call_groq
+from app.llm.llm_client import call_cerebras
 
 SYSTEM_PROMPT = """
 You are a scam detection system.
@@ -22,7 +22,7 @@ def detect_scam(conversation):
         {"role": "user", "content": conversation}
     ]
 
-    raw_output = call_groq(messages)
+    raw_output = call_cerebras(messages)
 
     try:
         return json.loads(raw_output)

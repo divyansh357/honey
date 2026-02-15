@@ -1,4 +1,4 @@
-from app.llm.llm_client import call_groq
+from app.llm.llm_client import call_cerebras
 
 
 AGENT_SYSTEM_PROMPT = """
@@ -140,7 +140,7 @@ def generate_agent_reply(conversation_text: str) -> str:
         {"role": "user", "content": conversation_text}
     ]
 
-    reply = call_groq(messages, temperature=0.75)
+    reply = call_cerebras(messages, temperature=0.75)
 
     reply = reply.strip().replace("\n", " ")
 

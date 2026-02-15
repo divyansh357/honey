@@ -38,3 +38,5 @@ Thumbs.db
 .cache/
 *.db
 config/secrets.json
+sessions.json
+sessions.json.tmp

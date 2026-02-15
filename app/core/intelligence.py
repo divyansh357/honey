@@ -28,6 +28,7 @@ BANK_REGEX = re.compile(
 SUSPICIOUS_KEYWORDS = [
     "urgent",
     "verify",
+    "verify now",
     "blocked",
     "suspended",
     "immediately",
@@ -35,11 +36,29 @@ SUSPICIOUS_KEYWORDS = [
     "payment",
     "transfer",
     "account",
+    "account blocked",
+    "account suspended",
     "upi",
     "otp",
     "kyc",
     "fraud",
-    "pin"
+    "pin",
+    "link",
+    "expire",
+    "penalty",
+    "refund",
+    "claim",
+    "lottery",
+    "prize",
+    "winner",
+    "offer",
+    "limited time",
+    "act now",
+    "share",
+    "credential",
+    "password",
+    "cvv",
+    "card number"
 ]
 
 

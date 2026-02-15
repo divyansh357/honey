@@ -12,6 +12,13 @@ from app.core.callback import send_final_callback
 app = FastAPI(title="Agentic HoneyPot API")
 
 
+# ---------- HEALTH CHECK ----------
+
+@app.get("/")
+def health_check():
+    return {"status": "running", "service": "Agentic HoneyPot API"}
+
+
 # ---------- HELPERS ----------
 
 def conversation_to_text(messages):
@@ -48,7 +55,7 @@ def honeypot_endpoint(
     data: IncomingRequest,
     _: str = Depends(verify_api_key)
 ):
-
+  try:
     session_id = data.sessionId or f"tester-{uuid.uuid4()}"
     session = get_or_create_session(session_id)
 
@@ -100,6 +107,12 @@ def honeypot_endpoint(
         agent_reply = generate_agent_reply(conversation_text)
         session["agentActive"] = True
         session["lastAgentReply"] = agent_reply
+        # Count agent reply in total messages exchanged
+        session["totalMessages"] += 1
+    else:
+        # Still respond naturally even before scam is confirmed
+        agent_reply = generate_agent_reply(conversation_text)
+        session["totalMessages"] += 1
 
     # ---------- EXTRACTION ----------
 
@@ -114,15 +127,15 @@ def honeypot_endpoint(
                 if v not in session["intelligence"][key]:
                     session["intelligence"][key].append(v)
 
-    # ---------- SESSION CLOSURE ----------
+    # ---------- SESSION CLOSURE (mandatory callback) ----------
 
     if (
         session["scamDetected"]
         and not session.get("closed", False)
         and should_close_session(session)
     ):
+        # Synchronous callback — mandatory for GUVI scoring
         success = send_final_callback(session_id, session)
-
         if success:
             session["closed"] = True
             session["callbackSent"] = True
@@ -132,4 +145,11 @@ def honeypot_endpoint(
     return AgentReply(
         status="success",
         reply=agent_reply or "Could you explain that again?"
+    )
+
+  except Exception as e:
+    print(f"[HONEYPOT ERROR] {e}")
+    return AgentReply(
+        status="error",
+        reply="Could you explain that again?"
     )
