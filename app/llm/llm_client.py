@@ -26,7 +26,8 @@ def call_cerebras(messages, temperature=0.6):
     payload = {
         "model": MODEL,
         "messages": messages,
-        "temperature": temperature
+        "temperature": temperature,
+        "max_tokens": 150
     }
 
     try:

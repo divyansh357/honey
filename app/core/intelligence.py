@@ -37,9 +37,9 @@ APK_REGEX = re.compile(
     re.IGNORECASE
 )
 
-# Indian phone numbers - flexible matching
+# Indian phone numbers - must NOT be inside longer digit sequences
 PHONE_REGEX = re.compile(
-    r"(?:\+91[\s-]?|91[\s-]?|0)?([6-9]\d[\s-]?\d{4}[\s-]?\d{4})"
+    r"(?<!\d)(?:\+91[\s-]?|91[\s-]?|0)?([6-9]\d[\s-]?\d{4}[\s-]?\d{4})(?!\d)"
 )
 
 # Bank / card / long identifiers (10-18 digits, may have spaces/dashes)
@@ -191,7 +191,20 @@ def extract_intelligence(text: str) -> dict:
         if digits in phones:
             continue
 
-        # Ignore garbage numbers (all same digit or sequential)
+        # Skip if it's 91 + phone number (country code prefix)
+        if len(digits) >= 12 and digits[:2] == "91" and digits[2:] in phones:
+            continue
+
+        # Skip if it CONTAINS a known phone number as substring
+        is_phone_variant = False
+        for ph in phones:
+            if ph in digits:
+                is_phone_variant = True
+                break
+        if is_phone_variant and len(digits) <= 12:
+            continue
+
+        # Ignore garbage numbers (all same digit or too few unique)
         if len(set(digits)) <= 2:
             continue
 

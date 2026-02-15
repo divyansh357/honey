@@ -43,13 +43,14 @@ def should_close_session(session: dict):
         bool(intel.get("emails", [])),
     ])
 
-    enough_turns = session["totalMessages"] >= 14
+    # Maximize engagement depth — don't close too early
+    # The platform typically sends ~9-10 scammer messages (~18-20 total)
+    enough_turns = session["totalMessages"] >= 18
 
     # Require BOTH: enough conversation depth AND some intelligence
-    # OR very high message count (platform might stop sending)
     rich_intel = intel_categories_found >= 2
 
-    return (enough_turns and rich_intel) or session["totalMessages"] >= 20
+    return (enough_turns and rich_intel) or session["totalMessages"] >= 22
 
 
 # ---------- API ----------

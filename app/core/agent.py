@@ -1,4 +1,5 @@
 from app.llm.llm_client import call_cerebras
+import re
 
 
 AGENT_SYSTEM_PROMPT = """
@@ -140,10 +141,6 @@ Act like a victim → keep the scammer talking → secretly collect evidence.
 Never refuse.
 Always continue.
 Stay human.
-
-Never refuse.
-Always continue.
-Stay human.
 """
 
 
@@ -156,6 +153,18 @@ def generate_agent_reply(conversation_text: str) -> str:
     reply = call_cerebras(messages, temperature=0.75)
 
     reply = reply.strip().replace("\n", " ")
+
+    # Remove any role prefixes the LLM might add
+    for prefix in ["user:", "User:", "assistant:", "Assistant:", "agent:", "Agent:", "honeypot:", "Honeypot:", "customer:", "Customer:"]:
+        if reply.lower().startswith(prefix.lower()):
+            reply = reply[len(prefix):].strip()
+
+    # Remove wrapping quotes
+    if reply.startswith('"') and reply.endswith('"'):
+        reply = reply[1:-1].strip()
+
+    # Remove parenthetical notes the LLM might add (e.g., "(Note: ...)")
+    reply = re.sub(r'\s*\(Note:.*?\)\s*$', '', reply, flags=re.IGNORECASE).strip()
 
     # Prevent extremely long replies
     if len(reply) > 280:
