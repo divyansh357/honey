@@ -6,8 +6,8 @@ GUVI_CALLBACK_URL = "https://hackathon.guvi.in/api/updateHoneyPotFinalResult"
 
 def build_agent_notes(session_data):
     """
-    Creates evaluator-friendly behavioral summary.
-    Covers urgency tactics, payment redirection, and intelligence gathered.
+    Creates comprehensive evaluator-friendly behavioral summary.
+    Covers tactics, intelligence gathered, and manipulation techniques.
     """
 
     intel = session_data.get("intelligence", {})
@@ -16,29 +16,41 @@ def build_agent_notes(session_data):
     notes = []
 
     # Tactic-based notes
-    urgency_words = {"urgent", "immediately", "act now", "limited time", "expire"}
+    urgency_words = {"urgent", "immediately", "act now", "limited time", "expire", "lockout"}
     if urgency_words & set(keywords):
-        notes.append("used urgency tactics")
+        notes.append("used urgency tactics and threats")
 
     if intel.get("bankAccounts"):
-        notes.append("attempted to extract bank account details")
+        accts = ", ".join(intel["bankAccounts"])
+        notes.append(f"attempted to extract bank account details ({accts})")
 
     if intel.get("upiIds"):
-        notes.append("shared suspicious UPI ID for payment redirection")
+        ids = ", ".join(intel["upiIds"])
+        notes.append(f"shared suspicious UPI IDs for payment redirection ({ids})")
 
     if intel.get("phishingLinks"):
-        notes.append("sent phishing link")
+        notes.append(f"sent {len(intel['phishingLinks'])} phishing link(s)")
 
     if intel.get("phoneNumbers"):
-        notes.append("provided contact number for off-platform communication")
+        nums = ", ".join(intel["phoneNumbers"])
+        notes.append(f"provided contact numbers ({nums})")
 
-    if "otp" in keywords:
+    if intel.get("emails"):
+        notes.append(f"shared email addresses: {', '.join(intel['emails'])}")
+
+    if intel.get("ifscCodes"):
+        notes.append(f"shared IFSC codes: {', '.join(intel['ifscCodes'])}")
+
+    if intel.get("telegramIds"):
+        notes.append(f"directed to Telegram: {', '.join(intel['telegramIds'])}")
+
+    if "otp" in keywords or "send otp" in keywords:
         notes.append("attempted OTP extraction")
 
-    if "kyc" in keywords:
+    if "kyc" in keywords or "update kyc" in keywords:
         notes.append("used fake KYC verification pretext")
 
-    if {"blocked", "suspended", "account blocked", "account suspended"} & set(keywords):
+    if {"blocked", "suspended", "account blocked", "account suspended", "compromised", "freeze"} & set(keywords):
         notes.append("claimed account suspension to create panic")
 
     if {"refund", "claim", "lottery", "prize", "winner"} & set(keywords):
@@ -46,6 +58,15 @@ def build_agent_notes(session_data):
 
     if {"password", "cvv", "card number", "credential"} & set(keywords):
         notes.append("attempted credential theft")
+
+    if {"bank officer", "customer care", "helpdesk", "support team", "rbi"} & set(keywords):
+        notes.append("impersonated bank/official authority")
+
+    if {"install", "download", "apk"} & set(keywords):
+        notes.append("attempted to install malicious software")
+
+    if {"whatsapp", "telegram"} & set(keywords):
+        notes.append("tried to move conversation to unmonitored platform")
 
     if not notes:
         return "Scammer used social engineering tactics to request sensitive financial information."
@@ -66,14 +87,21 @@ def send_final_callback(session_id: str, session_data: dict) -> bool:
 
     # Format phone numbers with +91 prefix as required by GUVI
     intel = session_data["intelligence"]
+    formatted_phones = [
+        f"+91{p}" if not p.startswith("+") else p
+        for p in intel.get("phoneNumbers", [])
+    ]
+
+    # Merge APK links into phishing links
+    all_links = list(set(
+        intel.get("phishingLinks", []) + intel.get("apkLinks", [])
+    ))
+
     formatted_intel = {
         "bankAccounts": intel.get("bankAccounts", []),
         "upiIds": intel.get("upiIds", []),
-        "phishingLinks": intel.get("phishingLinks", []),
-        "phoneNumbers": [
-            f"+91{p}" if not p.startswith("+") else p
-            for p in intel.get("phoneNumbers", [])
-        ],
+        "phishingLinks": sorted(all_links),
+        "phoneNumbers": formatted_phones,
         "suspiciousKeywords": intel.get("suspiciousKeywords", [])
     }
 

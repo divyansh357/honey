@@ -35,17 +35,21 @@ def should_close_session(session: dict):
 
     intel = session["intelligence"]
 
-    has_payment_info = (
-        intel["bankAccounts"]
-        or intel["upiIds"]
-        or intel["phishingLinks"]
-        or intel["phoneNumbers"]
-    )
+    intel_categories_found = sum([
+        bool(intel["bankAccounts"]),
+        bool(intel["upiIds"]),
+        bool(intel["phishingLinks"]),
+        bool(intel["phoneNumbers"]),
+        bool(intel.get("emails", [])),
+    ])
 
-    enough_turns = session["totalMessages"] >= 8
+    enough_turns = session["totalMessages"] >= 14
 
-    # CLOSE if either condition met
-    return bool(has_payment_info) or enough_turns
+    # Require BOTH: enough conversation depth AND some intelligence
+    # OR very high message count (platform might stop sending)
+    rich_intel = intel_categories_found >= 2
+
+    return (enough_turns and rich_intel) or session["totalMessages"] >= 20
 
 
 # ---------- API ----------
@@ -90,7 +94,7 @@ def honeypot_endpoint(
 
     # Replace session message history with evaluator truth
     session["messages"] = rebuilt_messages
-    session["totalMessages"] = len(rebuilt_messages)
+    session["totalMessages"] = len(rebuilt_messages) + 1  # +1 for agent reply
 
     conversation_text = conversation_to_text(session["messages"])
 
@@ -108,25 +112,35 @@ def honeypot_endpoint(
         agent_reply = generate_agent_reply(conversation_text)
         session["agentActive"] = True
         session["lastAgentReply"] = agent_reply
-        # Count agent reply in total messages exchanged
-        session["totalMessages"] += 1
     else:
         # Still respond naturally even before scam is confirmed
         agent_reply = generate_agent_reply(conversation_text)
-        session["totalMessages"] += 1
 
     # ---------- EXTRACTION ----------
 
-    # Only extract from current incoming message
-    current_text = rebuilt_messages[-1]["text"]
+    # Extract from ALL scammer messages in conversation (not just latest)
+    # This ensures nothing is missed even if previous extraction was partial
+    session["intelligence"] = {
+        "bankAccounts": [],
+        "upiIds": [],
+        "phishingLinks": [],
+        "phoneNumbers": [],
+        "suspiciousKeywords": [],
+        "emails": [],
+        "ifscCodes": [],
+        "telegramIds": [],
+        "apkLinks": []
+    }
 
-    if rebuilt_messages[-1]["sender"] == "scammer":
-        extracted = extract_intelligence(current_text)
-
-        for key, values in extracted.items():
-            for v in values:
-                if v not in session["intelligence"][key]:
-                    session["intelligence"][key].append(v)
+    for msg in rebuilt_messages:
+        if msg.get("sender") == "scammer":
+            extracted = extract_intelligence(msg["text"])
+            for key, values in extracted.items():
+                for v in values:
+                    if v not in session["intelligence"].get(key, []):
+                        if key not in session["intelligence"]:
+                            session["intelligence"][key] = []
+                        session["intelligence"][key].append(v)
 
     # ---------- SESSION CLOSURE (mandatory callback) ----------
 

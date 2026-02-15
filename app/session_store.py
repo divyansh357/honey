@@ -69,7 +69,11 @@ def get_or_create_session(session_id):
                 "upiIds": [],
                 "phishingLinks": [],
                 "phoneNumbers": [],
-                "suspiciousKeywords": []
+                "suspiciousKeywords": [],
+                "emails": [],
+                "ifscCodes": [],
+                "telegramIds": [],
+                "apkLinks": []
             }
         }
 

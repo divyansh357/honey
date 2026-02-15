@@ -2,63 +2,74 @@ import re
 
 
 # ==============================
-# STRONG REGEX PATTERNS
+# REGEX PATTERNS
 # ==============================
 
-# Covers most real-world UPI formats
+# UPI: user@handler (exclude common email domains)
+EMAIL_DOMAINS = {"gmail", "yahoo", "hotmail", "outlook", "protonmail", "mail", "rediffmail", "live", "icloud", "aol"}
+
+UPI_HANDLERS = {
+    "paytm", "ybl", "upi", "oksbi", "okaxis", "okicici", "okhdfcbank",
+    "axl", "ibl", "sbi", "icici", "hdfcbank", "apl", "ratn",
+    "unionbank", "boi", "citi", "pnb", "kotak", "indus", "federal",
+    "freecharge", "phonepe", "gpay", "amazonpay", "airtel", "jio",
+    "fakebank", "bank", "pay", "wallet"
+}
+
 UPI_REGEX = re.compile(
-    r"\b[a-zA-Z0-9._-]{2,}@[a-zA-Z0-9.-]{2,}\b"
+    r"[a-zA-Z0-9._-]{2,}@[a-zA-Z0-9._-]{2,}"
 )
 
-# Catch http, https, AND www
+# Email addresses
+EMAIL_REGEX = re.compile(
+    r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}"
+)
+
+# Catch http, https, www, and suspicious short URLs
 URL_REGEX = re.compile(
-    r"\b(?:https?://|www\.)[^\s]+\b"
+    r"(?:https?://|www\.)[^\s\"\'>]+",
+    re.IGNORECASE
 )
 
-# STRICT Indian phone detection
+# APK / download links
+APK_REGEX = re.compile(
+    r"(?:https?://|www\.)[^\s]*\.(?:apk|exe|msi|dmg|zip|rar)",
+    re.IGNORECASE
+)
+
+# Indian phone numbers - flexible matching
 PHONE_REGEX = re.compile(
-    r"\b(?:\+91[-\s]?|0)?([6-9]\d{9})\b"
+    r"(?:\+91[\s-]?|91[\s-]?|0)?([6-9]\d[\s-]?\d{4}[\s-]?\d{4})"
 )
 
-# Bank / card / long identifiers
+# Bank / card / long identifiers (10-18 digits, may have spaces/dashes)
 BANK_REGEX = re.compile(
-    r"\b\d{10,18}\b"
+    r"\b(\d[\d\s-]{9,20}\d)\b"
+)
+
+# IFSC Code pattern
+IFSC_REGEX = re.compile(
+    r"\b[A-Z]{4}0[A-Z0-9]{6}\b"
+)
+
+# Telegram usernames
+TELEGRAM_REGEX = re.compile(
+    r"(?:@|t\.me/|telegram\.me/)([a-zA-Z][a-zA-Z0-9_]{4,})"
 )
 
 SUSPICIOUS_KEYWORDS = [
-    "urgent",
-    "verify",
-    "verify now",
-    "blocked",
-    "suspended",
-    "immediately",
-    "click",
-    "payment",
-    "transfer",
-    "account",
-    "account blocked",
-    "account suspended",
-    "upi",
-    "otp",
-    "kyc",
-    "fraud",
-    "pin",
-    "link",
-    "expire",
-    "penalty",
-    "refund",
-    "claim",
-    "lottery",
-    "prize",
-    "winner",
-    "offer",
-    "limited time",
-    "act now",
-    "share",
-    "credential",
-    "password",
-    "cvv",
-    "card number"
+    "urgent", "verify", "verify now", "blocked", "suspended",
+    "immediately", "click", "payment", "transfer", "account",
+    "account blocked", "account suspended", "upi", "otp", "kyc",
+    "fraud", "pin", "link", "expire", "penalty", "refund",
+    "claim", "lottery", "prize", "winner", "offer", "limited time",
+    "act now", "share", "credential", "password", "cvv", "card number",
+    "rbi", "reserve bank", "aadhaar", "pan card", "ifsc",
+    "compromised", "unauthorized", "suspicious", "lockout", "freeze",
+    "beneficiary", "confirmation code", "security alert", "update kyc",
+    "reactivate", "deactivate", "verify identity", "send otp",
+    "bank officer", "customer care", "helpdesk", "support team",
+    "whatsapp", "telegram", "install", "download", "apk"
 ]
 
 
@@ -94,6 +105,39 @@ def clean_scammer_text(text: str) -> str:
 
 
 # ==============================
+# CLASSIFICATION HELPERS
+# ==============================
+
+def is_upi_id(value: str) -> bool:
+    """Check if an @-address is a UPI ID (not an email)."""
+    parts = value.split("@")
+    if len(parts) != 2:
+        return False
+    domain = parts[1].lower().rstrip(".")
+    # If domain matches a known UPI handler
+    if domain in UPI_HANDLERS:
+        return True
+    # If domain does NOT have a TLD (no dot), likely UPI
+    if "." not in domain:
+        return True
+    # If domain matches an email domain
+    domain_base = domain.split(".")[0]
+    if domain_base in EMAIL_DOMAINS:
+        return False
+    return False
+
+
+def is_email(value: str) -> bool:
+    """Check if an @-address is an email."""
+    parts = value.split("@")
+    if len(parts) != 2:
+        return False
+    domain = parts[1].lower()
+    # Must have a TLD
+    return "." in domain
+
+
+# ==============================
 # EXTRACTION ENGINE
 # ==============================
 
@@ -108,54 +152,78 @@ def extract_intelligence(text: str) -> dict:
     raw_phones = PHONE_REGEX.findall(text)
 
     phones = set()
-
     for p in raw_phones:
-
         digits = re.sub(r"\D", "", p)
-
-        # STRICT: must be EXACTLY 10
         if len(digits) == 10:
             phones.add(digits)
 
+    # ---------- ALL @-addresses ----------
+    at_addresses = set(UPI_REGEX.findall(text))
+
+    upis = set()
+    emails = set()
+
+    for addr in at_addresses:
+        addr_lower = addr.lower()
+        if is_upi_id(addr_lower):
+            upis.add(addr_lower)
+        elif is_email(addr_lower):
+            emails.add(addr_lower)
+
+    # Also catch emails that UPI regex might miss
+    for em in EMAIL_REGEX.findall(text):
+        em_lower = em.lower()
+        if is_email(em_lower) and em_lower not in upis:
+            emails.add(em_lower)
+
     # ---------- BANK ----------
-    raw_numbers = set(BANK_REGEX.findall(text))
+    raw_numbers = BANK_REGEX.findall(text)
 
     banks = set()
-
     for num in raw_numbers:
-
         digits = re.sub(r"\D", "", num)
+
+        # Must be 10-18 digits
+        if len(digits) < 10 or len(digits) > 18:
+            continue
 
         # Skip if same as phone
         if digits in phones:
             continue
 
-        # Ignore garbage numbers
+        # Ignore garbage numbers (all same digit or sequential)
         if len(set(digits)) <= 2:
             continue
 
         banks.add(digits)
 
-    # ---------- UPI ----------
-    upis = set(u.lower() for u in UPI_REGEX.findall(text))
-
     # ---------- URL ----------
-    urls = set(u.lower() for u in URL_REGEX.findall(text))
+    urls = set(u.lower().rstrip(".,;:)") for u in URL_REGEX.findall(text))
+
+    # ---------- APK ----------
+    apks = set(u.lower().rstrip(".,;:)") for u in APK_REGEX.findall(text))
+    urls = urls | apks  # merge APK links into phishing links
+
+    # ---------- IFSC ----------
+    ifscs = set(IFSC_REGEX.findall(text))
+
+    # ---------- TELEGRAM ----------
+    telegrams = set(f"@{t}" for t in TELEGRAM_REGEX.findall(text))
 
     # ---------- KEYWORDS ----------
     lowered = text.lower()
-
-    keywords = {
-        kw for kw in SUSPICIOUS_KEYWORDS
-        if kw in lowered
-    }
+    keywords = {kw for kw in SUSPICIOUS_KEYWORDS if kw in lowered}
 
     return {
-        "upiIds": list(sorted(upis)),
-        "phishingLinks": list(sorted(urls)),
-        "phoneNumbers": list(sorted(phones)),
-        "bankAccounts": list(sorted(banks)),
-        "suspiciousKeywords": list(sorted(keywords))
+        "upiIds": sorted(upis),
+        "phishingLinks": sorted(urls),
+        "phoneNumbers": sorted(phones),
+        "bankAccounts": sorted(banks),
+        "suspiciousKeywords": sorted(keywords),
+        "emails": sorted(emails),
+        "ifscCodes": sorted(ifscs),
+        "telegramIds": sorted(telegrams),
+        "apkLinks": sorted(apks)
     }
 
 
@@ -165,5 +233,9 @@ def empty_intel():
         "phishingLinks": [],
         "phoneNumbers": [],
         "bankAccounts": [],
-        "suspiciousKeywords": []
+        "suspiciousKeywords": [],
+        "emails": [],
+        "ifscCodes": [],
+        "telegramIds": [],
+        "apkLinks": []
     }
