@@ -50,6 +50,7 @@ def should_close_session(session: dict):
 
 # ---------- API ----------
 
+@app.post("/", response_model=AgentReply)
 @app.post("/honeypot", response_model=AgentReply)
 def honeypot_endpoint(
     data: IncomingRequest,
