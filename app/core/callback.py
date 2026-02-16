@@ -81,9 +81,10 @@ def send_final_callback(session_id: str, session_data: dict) -> bool:
         False -> callback failed
     """
 
-    if session_data.get("callbackSent"):
-        print(f"[CALLBACK SKIPPED] Already sent for {session_id}")
-        return True
+    # Don't skip — evaluator takes the LAST callback, so always send latest
+    # if session_data.get("callbackSent"):
+    #     print(f"[CALLBACK SKIPPED] Already sent for {session_id}")
+    #     return True
 
     # Format phone numbers with +91 prefix as required by GUVI
     intel = session_data["intelligence"]

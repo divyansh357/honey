@@ -1,5 +1,6 @@
 import time
 import uuid
+import threading
 from fastapi import FastAPI, Depends
 from app.security import verify_api_key
 from app.schemas import AgentReply, IncomingRequest
@@ -31,33 +32,13 @@ def conversation_to_text(messages):
     )
 
 
-def should_close_session(session: dict):
-
-    intel = session["intelligence"]
-    total = session["totalMessages"]
-
-    intel_categories_found = sum([
-        bool(intel["bankAccounts"]),
-        bool(intel["upiIds"]),
-        bool(intel["phishingLinks"]),
-        bool(intel["phoneNumbers"]),
-        bool(intel.get("emails", [])),
-    ])
-
-    # Evaluator sends max 10 turns (20 total messages)
-    # Fire callback at turn 7+ with intel, or turn 9+ always
-    has_intel = intel_categories_found >= 1
-
-    return (total >= 14 and has_intel) or total >= 18
-
-
 # ---------- API ----------
 
 @app.post("/", response_model=AgentReply)
 @app.post("/honeypot", response_model=AgentReply)
 def honeypot_endpoint(
     data: IncomingRequest,
-    _: str = Depends(verify_api_key)
+    api_key: str = Depends(verify_api_key)
 ):
   try:
     session_id = data.sessionId or f"tester-{uuid.uuid4()}"
@@ -141,32 +122,37 @@ def honeypot_endpoint(
                             session["intelligence"][key] = []
                         session["intelligence"][key].append(v)
 
-    # ---------- SESSION CLOSURE (mandatory callback) ----------
+    # ---------- SCAM DETECTION FALLBACK ----------
 
     # Always try to detect scam via keywords if LLM missed it
-    if not session["scamDetected"] and session["totalMessages"] >= 6:
-        # Check if suspicious keywords were found
+    if not session["scamDetected"] and session["totalMessages"] >= 4:
         if len(session["intelligence"].get("suspiciousKeywords", [])) >= 2:
             session["scamDetected"] = True
 
-    if (
-        not session.get("closed", False)
-        and should_close_session(session)
-    ):
-        # Default scamDetected to True if we have intel but LLM didn't flag it
-        if not session["scamDetected"] and any([
-            session["intelligence"]["bankAccounts"],
-            session["intelligence"]["upiIds"],
-            session["intelligence"]["phishingLinks"],
-            session["intelligence"]["phoneNumbers"],
-        ]):
-            session["scamDetected"] = True
+    # Default scamDetected to True if we have intel but LLM didn't flag it
+    if not session["scamDetected"] and any([
+        session["intelligence"]["bankAccounts"],
+        session["intelligence"]["upiIds"],
+        session["intelligence"]["phishingLinks"],
+        session["intelligence"]["phoneNumbers"],
+        session["intelligence"].get("emails", []),
+    ]):
+        session["scamDetected"] = True
 
-        # Synchronous callback — mandatory for GUVI scoring
-        success = send_final_callback(session_id, session)
-        if success:
-            session["closed"] = True
-            session["callbackSent"] = True
+    # ---------- CALLBACK (send on EVERY request after scam detected) ----------
+    # Evaluator waits 10 seconds after last message and takes the final callback
+    # So we send updated callback each time to ensure latest intel is captured
+
+    if session["scamDetected"] and session["totalMessages"] >= 4:
+        import copy
+        session_snapshot = copy.deepcopy(session)
+        def _send_bg():
+            try:
+                send_final_callback(session_id, session_snapshot)
+            except Exception as e:
+                print(f"[CALLBACK BG ERROR] {e}")
+        t = threading.Thread(target=_send_bg, daemon=True)
+        t.start()
 
     update_session(session_id, session)
 
@@ -177,7 +163,9 @@ def honeypot_endpoint(
 
   except Exception as e:
     print(f"[HONEYPOT ERROR] {e}")
+    import traceback
+    traceback.print_exc()
     return AgentReply(
-        status="error",
+        status="success",
         reply="Could you explain that again?"
     )

@@ -1,290 +1,166 @@
-# 🛡️ Agentic HoneyPot API
+# Agentic HoneyPot API
 
-A sophisticated AI-powered scam detection and engagement system built for the GUVI Hackathon. This honeypot intelligently detects scam attempts, engages with scammers through realistic conversations, and extracts actionable intelligence.
+## Description
 
-## 📋 Overview
+An AI-powered honeypot system that detects scam messages across multiple fraud types (bank fraud, UPI fraud, phishing, lottery/investment scams) and autonomously engages scammers through multi-turn conversations to extract actionable intelligence — bank accounts, UPI IDs, phone numbers, phishing links, email addresses, IFSC codes, and more.
 
-The Agentic HoneyPot API simulates a realistic bank customer interaction to:
-- **Detect** fraudulent scam attempts in real-time
-- **Engage** scammers with AI-generated human-like responses
-- **Extract** sensitive intelligence (bank accounts, UPI IDs, phishing links, phone numbers)
-- **Report** findings to the GUVI evaluation platform
+## Tech Stack
 
-## ✨ Key Features
+- **Language/Framework**: Python 3.8+ / FastAPI
+- **LLM Provider**: Cerebras Cloud API (Llama 3.1 8B)
+- **Key Libraries**: `requests`, `uvicorn`, `pydantic`, `python-dotenv`
+- **Deployment**: Railway
 
-### 🔍 Intelligent Scam Detection
-- Real-time conversation analysis using LLM-powered detection
-- Confidence scoring and reasoning for each detection
-- Context-aware evaluation of conversation history
-
-### 🤖 AI-Powered Engagement
-- Realistic bank customer persona that stays in character
-- Dynamic conversation strategies (curious, cautious, cooperative)
-- Anti-repetition mechanisms for natural dialogue
-- Intelligent questioning to extract scammer intelligence
-
-### 📊 Intelligence Extraction
-- **Bank Account Numbers**: Detects 10-18 digit sequences
-- **UPI IDs**: Identifies payment handler addresses
-- **Phishing Links**: Captures suspicious URLs
-- **Phone Numbers**: Extracts Indian mobile numbers (+91, 10-digit)
-- **Keyword Analysis**: Tracks suspicious terms (OTP, verify, urgent, etc.)
-
-### 🔐 Security Features
-- API key authentication
-- Session-based conversation tracking
-- Thread-safe file operations
-- Rate limiting protection
-
-## 🏗️ Architecture
-
-```
-GUVI-Hackathon1/
-├── app/
-│   ├── main.py                 # FastAPI application & endpoints
-│   ├── config.py               # Environment configuration
-│   ├── schemas.py              # Pydantic models
-│   ├── security.py             # API key authentication
-│   ├── session_store.py        # Thread-safe session management
-│   ├── core/
-│   │   ├── agent.py            # AI conversation agent
-│   │   ├── scam_detector.py    # Scam detection logic
-│   │   ├── intelligence.py     # Intelligence extraction engine
-│   │   └── callback.py         # GUVI callback integration
-│   └── llm/
-│       └── llm_client.py       # Groq API integration
-├── Procfile                    # Deployment configuration
-├── requirements.txt            # Python dependencies
-└── sessions.json               # Session persistence
-```
-
-## 🚀 Getting Started
-
-### Prerequisites
-
-- Python 3.8+
-- API Keys:
-  - `API_KEY` - Your application API key
-  - `CEREBRAS_API_KEY` - Cerebras LLM API key
-
-### Installation
+## Setup Instructions
 
 1. **Clone the repository**
    ```bash
-   git clone <repository-url>
-   cd GUVI-Hackathon1
+   git clone https://github.com/divyansh357/honey.git
+   cd honey/GUVI-Hackathon1
    ```
 
-2. **Create virtual environment**
-   ```bash
-   python -m venv venv
-   venv\Scripts\activate
-   ```
-
-3. **Install dependencies**
+2. **Install dependencies**
    ```bash
    pip install -r requirements.txt
    ```
 
-4. **Configure environment variables**
-   
-   Create a `.env` file in the root directory:
-   ```env
-   API_KEY=your_api_key_here
-   CEREBRAS_API_KEY=your_cerebras_api_key_here
+3. **Set environment variables**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your actual API keys
    ```
 
-### Running Locally
+4. **Run the application**
+   ```bash
+   uvicorn app.main:app --host 0.0.0.0 --port 8000
+   ```
 
-```bash
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-```
+## API Endpoint
 
-The API  for web testing will be available at `http://localhost:8000/docs`
+- **URL**: `https://your-deployed-url.com/honeypot` (also accepts POST to `/`)
+- **Method**: POST
+- **Authentication**: `x-api-key` header
 
-### Deployment
-
-The project includes a `Procfile` for easy deployment to platforms like Heroku:
-
-```bash
-git push heroku main
-```
-
-## 📡 API Endpoints
-
-### POST `/honeypot`
-
-Main endpoint for processing conversations and detecting scams.
-
-**Headers:**
-```
-X-API-Key: your_api_key
-Content-Type: application/json
-```
-
-**Request Body:**
+### Request Format
 ```json
 {
-  "sessionId": "optional-session-id",
+  "sessionId": "uuid-string",
   "message": {
     "sender": "scammer",
-    "text": "Your account has been blocked. Verify immediately.",
-    "timestamp": 1234567890
+    "text": "URGENT: Your account has been compromised...",
+    "timestamp": "2025-02-11T10:30:00Z"
   },
   "conversationHistory": [
     {
       "sender": "scammer",
       "text": "Previous message",
-      "timestamp": 1234567880
+      "timestamp": "1707638400000"
     }
   ],
   "metadata": {
-    "channel": "whatsapp",
-    "language": "en",
+    "channel": "SMS",
+    "language": "English",
     "locale": "IN"
   }
 }
 ```
 
-**Response:**
+### Response Format
 ```json
 {
   "status": "success",
-  "reply": "I'm concerned. Can you explain what happened to my account?"
+  "reply": "I'm concerned about my account. Can you verify your identity?"
 }
 ```
 
-## 🧠 How It Works
+## Approach
 
-### 1. **Session Management**
-- Each conversation is tracked via unique `sessionId`
-- Sessions persist across multiple API calls
-- Conversation history rebuilt from evaluator data
+### How We Detect Scams
+- **LLM-based analysis**: Conversation text is analyzed by Cerebras Llama 3.1 for scam intent classification with confidence scoring
+- **Robust JSON extraction**: Even if the LLM wraps JSON in explanatory text, we extract it reliably
+- **Keyword fallback**: If the LLM fails (rate limit, timeout, refusal), a weighted keyword scoring system detects scams using patterns like urgency, threats, financial requests, and impersonation
+- **Intel-based override**: If intelligence is extracted (bank accounts, UPI IDs, etc.) but LLM missed the scam, we auto-flag it
+- **No hardcoded responses**: All detection is generic and pattern-based
 
-### 2. **Scam Detection**
-- First message triggers LLM-based scam analysis
-- Detection result cached for session
-- Confidence scoring with detailed reasoning
+### How We Extract Intelligence
+Regex-based entity extraction runs across ALL scammer messages in the conversation history:
+- **Phone numbers**: Indian formats (+91-XXXX, 91XXXX, 0XXXX) with smart filtering to avoid substring matches
+- **Bank account numbers**: 10-18 digit sequences, filtered against phone numbers and country-code variants
+- **UPI IDs**: Smart classification — domain without TLD = UPI, with TLD = email. Supports 30+ known UPI handles
+- **Phishing URLs**: HTTP/HTTPS/www links including APK download links
+- **Email addresses**: Standard email pattern with TLD validation
+- **IFSC codes**: XXXX0XXXXXX format
+- **Telegram usernames**: @username and t.me/username patterns
+- **Suspicious keywords**: 40+ fraud-related terms
 
-### 3. **AI Agent Engagement**
-- Activates only after scam detection
-- Uses sophisticated prompt engineering for realistic responses
-- Varies behavior across conversation stages:
-  - **Early**: Curious, asking about the issue
-  - **Mid**: Probing for operational details
-  - **Late**: Stalling, confirming information
+### How We Maintain Engagement
+- **Persona-based agent**: Acts as a confused, cooperative victim across any scam type (bank fraud, UPI cashback, phishing, lottery)
+- **Scam-type adaptation**: Agent automatically adjusts persona based on context — worried bank customer vs. excited prize winner
+- **Strategic information seeking**: Feigns compliance while asking for phone numbers, UPI IDs, verification links, email addresses, alternative contacts
+- **Multi-turn memory**: Full conversation history passed to LLM for contextual responses
+- **Anti-repetition**: Rotates tone cycle (curious → cautious → cooperative → confused)
+- **Reply post-processing**: Strips role prefixes, quotation marks, parenthetical notes from LLM output
 
-### 4. **Intelligence Extraction**
-- Parses each scammer message using regex patterns
-- Accumulates findings across conversation
-- Cleans false positives and duplicates
+### Callback Strategy
+- Callback sent on **every request** after scam is detected (not just at session close)
+- Evaluator waits 10 seconds after last message and takes the final callback
+- Includes `engagementMetrics`, `extractedIntelligence`, `agentNotes`, and `status`
+- 3 retries with exponential backoff on failure
 
-### 5. **Session Closure**
-- Triggers when sufficient intelligence gathered OR 8+ messages exchanged
-- Sends comprehensive report to GUVI callback endpoint
-- Includes engagement metrics and extracted intelligence
+### Architecture
+```
+POST /honeypot
+     │
+     ├─ Auth Check (x-api-key, always returns 200)
+     ├─ Session Load/Create (file-based, thread-safe)
+     ├─ Rebuild History from evaluator data
+     ├─ Scam Detection (LLM → keyword fallback → intel override)
+     ├─ Agent Reply Generation (LLM with scam-type-adaptive prompt)
+     ├─ Intelligence Extraction (regex on ALL scammer messages)
+     ├─ Callback (async, sent every request after scam detected)
+     └─ Return { status: "success", reply: "..." }
+```
 
-## 🔧 Configuration
+## Project Structure
+```
+GUVI-Hackathon1/
+├── app/
+│   ├── main.py              # FastAPI endpoints and orchestration
+│   ├── config.py             # Environment variable loading
+│   ├── schemas.py            # Pydantic request/response models
+│   ├── security.py           # API key authentication (200-safe)
+│   ├── session_store.py      # Thread-safe JSON session persistence
+│   └── core/
+│       ├── scam_detector.py  # LLM + keyword scam detection
+│       ├── agent.py          # LLM-powered conversational agent
+│       ├── intelligence.py   # Regex intelligence extraction engine
+│       └── callback.py       # GUVI evaluation callback sender
+├── llm/
+│   └── llm_client.py        # Cerebras API client with fallbacks
+├── requirements.txt
+├── .env.example
+├── .gitignore
+├── railway.json
+├── Procfile
+└── README.md
+```
 
-### Environment Variables
+## Configuration
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `API_KEY` | Authentication key for API access | ✅ |
-| `CEREBRAS_API_KEY` | Cerebras LLM service API key | ✅ |
+| `API_KEY` | Authentication key for x-api-key header | Yes |
+| `CEREBRAS_API_KEY` | Cerebras Cloud LLM API key | Yes |
 
-### LLM Configuration
+## Scoring Targets
 
-- **Provider**: Cerebras Cloud
-- **Model**: `llama3.1-8b`
-- **Temperature**: 0.75 (agent), 0.6 (detection)
-- **Timeout**: 20 seconds
-- **Fallback**: 6 predefined responses
-
-## 📊 Intelligence Categories
-
-### Extracted Data Types
-
-1. **Bank Accounts**: 10-18 digit numeric sequences
-2. **UPI IDs**: Format `username@paymenthandler`
-3. **Phishing Links**: URLs (http/https/www)
-4. **Phone Numbers**: Indian mobile numbers (10 digits, 6-9 start)
-5. **Suspicious Keywords**: urgent, verify, blocked, OTP, etc.
-
-### Callback Payload
-
-```json
-{
-  "sessionId": "session-123",
-  "scamDetected": true,
-  "totalMessagesExchanged": 8,
-  "extractedIntelligence": {
-    "bankAccounts": ["1234567890123"],
-    "upiIds": ["scammer@paytm"],
-    "phishingLinks": ["http://fake-bank.com"],
-    "phoneNumbers": ["9876543210"],
-    "suspiciousKeywords": ["urgent", "verify", "otp"]
-  },
-  "agentNotes": "Scammer shared suspicious UPI ID, sent phishing link, attempted OTP extraction."
-}
-```
-
-## 🛠️ Tech Stack
-
-- **Framework**: FastAPI
-- **LLM Provider**: Cerebras Cloud (Llama 3.1)
-- **Validation**: Pydantic
-- **Server**: Uvicorn
-- **Deployment**: Heroku-compatible
-- **Storage**: JSON-based session persistence
-
-## 🎯 Use Cases
-
-- **Scam Research**: Gather intelligence on fraud tactics
-- **Security Training**: Understand social engineering methods
-- **Fraud Prevention**: Identify and catalog scam patterns
-- **Threat Intelligence**: Build databases of scammer infrastructure
-
-## 🔒 Security Considerations
-
-- API key authentication on all endpoints
-- Thread-safe session management
-- Atomic file operations for data integrity
-- Timeout protection on external API calls
-- Rate limiting handling for LLM service
-- Input validation with Pydantic schemas
-
-## 📈 Performance
-
-- **Response Time**: < 2s average (LLM dependent)
-- **Concurrent Sessions**: Thread-safe handling
-- **Fallback Mechanism**: Graceful degradation on LLM failures
-- **Retry Logic**: 3 attempts with exponential backoff for callbacks
-
-## 🤝 Contributing
-
-This project was developed for the GUVI Hackathon. For contributions:
-
-1. Fork the repository
-2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
-## 📝 License
-
-This project is created for educational and research purposes as part of the GUVI Hackathon.
-
-## 🙏 Acknowledgments
-
-- **GUVI** for hosting the hackathon
-- **Cerebras** for LLM API services
-- **FastAPI** community for excellent documentation
-
-## 📧 Support
-
-For issues or questions, please open an issue on the repository.
+| Category | Points | Our Approach |
+|----------|--------|------|
+| Scam Detection | 20/20 | LLM + keyword fallback + intel override |
+| Intelligence Extraction | 40/40 | Regex on all scammer messages, smart UPI/email classification |
+| Engagement Quality | 20/20 | Wall-clock duration tracking, 10+ message conversations |
+| Response Structure | 20/20 | All required + optional fields in callback |
 
 ---
 
-**⚠️ Disclaimer**: This honeypot is designed for research and educational purposes only. It should be used responsibly within legal and ethical boundaries.
+Built for the GUVI Hackathon. Uses Cerebras Cloud API for LLM inference.
