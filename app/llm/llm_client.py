@@ -1,23 +1,56 @@
+"""LLM Client Module
+==================
+Handles all communication with the Cerebras Cloud API for LLM inference.
+Provides automatic fallback replies when the API is unavailable, rate-limited,
+or returns safety refusals. This ensures the honeypot conversation never stalls.
+
+Features:
+- Timeout protection (20s)
+- Rate limit handling (429)
+- Server error handling (5xx)
+- Safety refusal detection
+- Fallback reply pool for graceful degradation
+"""
+
 import requests
 import random
+import logging
 from app.config import CEREBRAS_API_KEY
+
+logger = logging.getLogger(__name__)
 
 CEREBRAS_API_URL = "https://api.cerebras.ai/v1/chat/completions"
 MODEL = "llama3.1-8b"
 
-# Fallback replies keep conversation alive if LLM fails
+# Fallback replies keep conversation alive if LLM fails.
+# These are designed to naturally prompt the scammer for more details.
 FALLBACK_REPLIES = [
     "Sorry, I didn't fully understand. Could you explain that again?",
-    "Can you clarify what you mean?",
-    "Why is this required?",
-    "Is this something urgent?",
-    "Can you tell me more about the issue?",
-    "I'm not sure I follow — could you explain a bit more?"
+    "Can you clarify what you mean? Maybe share more details?",
+    "Why is this required? Can you explain the process?",
+    "Is this something urgent? What should I do first?",
+    "Can you tell me more about this issue? Who should I contact?",
+    "I'm not sure I follow — could you share the details again?",
+    "Before I proceed, can you give me the reference number or contact details?",
+    "I want to make sure this is correct — can you repeat the important details?"
 ]
 
 
-def call_cerebras(messages, temperature=0.6):
+def call_cerebras(messages: list, temperature: float = 0.6) -> str:
+    """
+    Call Cerebras Cloud API for chat completion.
 
+    Sends messages to the LLM and returns the generated text.
+    Handles errors gracefully by returning fallback replies that
+    keep the honeypot conversation going.
+
+    Args:
+        messages: List of message dicts with 'role' and 'content'
+        temperature: Sampling temperature (0.0-1.0), higher = more creative
+
+    Returns:
+        Generated text string, or a fallback reply if API fails
+    """
     headers = {
         "Authorization": f"Bearer {CEREBRAS_API_KEY}",
         "Content-Type": "application/json"
@@ -27,7 +60,7 @@ def call_cerebras(messages, temperature=0.6):
         "model": MODEL,
         "messages": messages,
         "temperature": temperature,
-        "max_tokens": 150
+        "max_tokens": 200  # Enough for 2-3 sentence replies
     }
 
     try:
