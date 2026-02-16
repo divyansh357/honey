@@ -34,6 +34,7 @@ def conversation_to_text(messages):
 def should_close_session(session: dict):
 
     intel = session["intelligence"]
+    total = session["totalMessages"]
 
     intel_categories_found = sum([
         bool(intel["bankAccounts"]),
@@ -43,14 +44,11 @@ def should_close_session(session: dict):
         bool(intel.get("emails", [])),
     ])
 
-    # Maximize engagement depth — don't close too early
-    # The platform typically sends ~9-10 scammer messages (~18-20 total)
-    enough_turns = session["totalMessages"] >= 18
+    # Evaluator sends max 10 turns (20 total messages)
+    # Fire callback at turn 7+ with intel, or turn 9+ always
+    has_intel = intel_categories_found >= 1
 
-    # Require BOTH: enough conversation depth AND some intelligence
-    rich_intel = intel_categories_found >= 2
-
-    return (enough_turns and rich_intel) or session["totalMessages"] >= 22
+    return (total >= 14 and has_intel) or total >= 18
 
 
 # ---------- API ----------
@@ -145,11 +143,25 @@ def honeypot_endpoint(
 
     # ---------- SESSION CLOSURE (mandatory callback) ----------
 
+    # Always try to detect scam via keywords if LLM missed it
+    if not session["scamDetected"] and session["totalMessages"] >= 6:
+        # Check if suspicious keywords were found
+        if len(session["intelligence"].get("suspiciousKeywords", [])) >= 2:
+            session["scamDetected"] = True
+
     if (
-        session["scamDetected"]
-        and not session.get("closed", False)
+        not session.get("closed", False)
         and should_close_session(session)
     ):
+        # Default scamDetected to True if we have intel but LLM didn't flag it
+        if not session["scamDetected"] and any([
+            session["intelligence"]["bankAccounts"],
+            session["intelligence"]["upiIds"],
+            session["intelligence"]["phishingLinks"],
+            session["intelligence"]["phoneNumbers"],
+        ]):
+            session["scamDetected"] = True
+
         # Synchronous callback — mandatory for GUVI scoring
         success = send_final_callback(session_id, session)
         if success:

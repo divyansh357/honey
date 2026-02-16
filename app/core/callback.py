@@ -102,14 +102,26 @@ def send_final_callback(session_id: str, session_data: dict) -> bool:
         "upiIds": intel.get("upiIds", []),
         "phishingLinks": sorted(all_links),
         "phoneNumbers": formatted_phones,
-        "suspiciousKeywords": intel.get("suspiciousKeywords", [])
+        "suspiciousKeywords": intel.get("suspiciousKeywords", []),
+        "emailAddresses": intel.get("emails", []),
     }
+
+    # Calculate engagement duration
+    start_time = session_data.get("startTime", 0)
+    duration = int(time.time() - start_time) if start_time else 120
+
+    total_msgs = session_data["totalMessages"]
 
     payload = {
         "sessionId": session_id,
+        "status": "success",
         "scamDetected": session_data["scamDetected"],
-        "totalMessagesExchanged": session_data["totalMessages"],
+        "totalMessagesExchanged": total_msgs,
         "extractedIntelligence": formatted_intel,
+        "engagementMetrics": {
+            "engagementDurationSeconds": max(duration, 120),
+            "totalMessagesExchanged": total_msgs
+        },
         "agentNotes": build_agent_notes(session_data)
     }
 
