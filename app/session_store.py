@@ -22,12 +22,11 @@ from threading import Lock
 
 logger = logging.getLogger(__name__)
 
-SESSION_FILE = "sessions.json"
-session_lock = Lock()
+SESSION_FILE: str = "sessions.json"
+session_lock: Lock = Lock()
 
 
 def load_sessions() -> dict:
-
     """
     Load all sessions from the JSON file.
 
@@ -118,7 +117,13 @@ def get_or_create_session(session_id: str) -> dict:
                 "emails": [],
                 "ifscCodes": [],
                 "telegramIds": [],
-                "apkLinks": []
+                "apkLinks": [],
+                "amounts": [],
+                "organizationsMentioned": [],
+                "remoteAccessTools": [],
+                "caseIds": [],
+                "policyNumbers": [],
+                "orderNumbers": []
             }
         }
 

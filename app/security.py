@@ -8,11 +8,12 @@ The GUVI evaluator expects 200 responses always — raising 401 would
 cause the evaluator to mark the entire test as failed.
 """
 
+from typing import Optional
 from fastapi import Header
 from app.config import API_KEY
 
 
-def verify_api_key(x_api_key: str = Header(default="")) -> str | None:
+def verify_api_key(x_api_key: str = Header(default="")) -> Optional[str]:
     """
     Validate the X-API-Key header against the configured API key.
 

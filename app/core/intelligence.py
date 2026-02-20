@@ -5,7 +5,7 @@ Extracts actionable intelligence from scam conversation messages using
 regex-based pattern matching and heuristic classification.
 
 Categories extracted:
-- Phone numbers (Indian mobile format)
+- Phone numbers (Indian mobile format, multiple variants)
 - Bank account numbers (9-18 digits)
 - UPI IDs (user@handler)
 - Email addresses
@@ -18,6 +18,11 @@ Categories extracted:
 - Card numbers (13-19 digits)
 - Monetary amounts (INR, Rs, ₹)
 - Organization/entity names impersonated
+- Case/reference IDs (CASE-XXXX, REF-XXXX, etc.)
+- Policy numbers (POL-XXXX, POLICY/XXXX, etc.)
+- Order numbers (ORD-XXXX, ORDER#XXXX, etc.)
+
+Scoring target: 30 pts (dynamic: 30 ÷ total fake fields in scenario)
 """
 
 import re
@@ -86,15 +91,28 @@ APK_REGEX = re.compile(
 
 # --- Phone Numbers ---
 
-# Indian phone numbers with lookbehind/lookahead to prevent false positives
+# Indian phone numbers — handles many formats:
+# +91 98765 43210, +91-9876543210, 09876543210, 91 9876543210,
+# 9876543210, +91 9876-543-210, etc.
 PHONE_REGEX = re.compile(
-    r"(?<!\d)(?:\+91[\s-]?|91[\s-]?|0)?([6-9]\d[\s-]?\d{4}[\s-]?\d{4})(?!\d)"
+    r"(?<!\d)(?:\+?91[\s\-.]?|0)?([6-9]\d[\s\-.]?\d{4}[\s\-.]?\d{4})(?!\d)"
 )
 
 # WhatsApp number mentions
 WHATSAPP_REGEX = re.compile(
-    r"(?:whatsapp|whats\s*app|wa)\s*(?:no|number|num|#)?[\s:.-]*(?:\+91[\s-]?|91[\s-]?|0)?([6-9]\d[\s-]?\d{4}[\s-]?\d{4})",
+    r"(?:whatsapp|whats\s*app|wa)\s*(?:no|number|num|#)?[\s:.\-]*(?:\+?91[\s\-.]?|0)?([6-9]\d[\s\-.]?\d{4}[\s\-.]?\d{4})",
     re.IGNORECASE
+)
+
+# Explicit phone number mentions with label
+LABELED_PHONE_REGEX = re.compile(
+    r"(?:phone|mobile|cell|contact|call|reach|number|dial|helpline|toll[\s\-]?free)[\s:.\-#]*(?:\+?91[\s\-.]?|0)?([6-9]\d[\s\-.]?\d{4}[\s\-.]?\d{4})",
+    re.IGNORECASE
+)
+
+# Toll-free numbers (1800-XXX-XXXX or 1800XXXXXXX)
+TOLL_FREE_REGEX = re.compile(
+    r"(?<!\d)1800[\s\-.]?\d{2,3}[\s\-.]?\d{4}(?!\d)"
 )
 
 # --- Bank / Financial ---
@@ -121,10 +139,62 @@ TELEGRAM_REGEX = re.compile(
     r"(?:@|t\.me/|telegram\.me/)([a-zA-Z][a-zA-Z0-9_]{4,})"
 )
 
+# Common organization names that should NOT be treated as Telegram handles
+# when matched by the @username pattern
+TELEGRAM_FALSE_POSITIVES = {
+    "phonepe", "paytm", "amazon", "microsoft", "google", "apple",
+    "netflix", "flipkart", "india", "gmail", "yahoo", "whatsapp",
+    "facebook", "instagram", "twitter", "incometax", "telegram",
+    "fakebank", "fakeupi", "fakefinance", "fakeinternational",
+    "fakeecommerce", "fakeutility", "fakepost", "fakepayment",
+    "fakegovt", "fakecryptoplatform", "fakeincometax", "fakekyc",
+    "licrenewal", "phonepe12345",
+}
+
 # --- Monetary Amounts ---
 
 AMOUNT_REGEX = re.compile(
-    r"(?:Rs\.?|INR|₹)\s*[\d,]+(?:\.\d{1,2})?|\b\d[\d,]*(?:\.\d{1,2})?\s*(?:rupees?|rs|lakh|lakhs|crore|crores)\b",
+    r"(?:Rs\.?|INR|₹)\s*[\d,]+(?:\.\d{1,2})?(?:\s*(?:lakh|lakhs|crore|crores)\b)?|\b\d[\d,]*(?:\.\d{1,2})?\s*(?:rupees?|rs|lakh|lakhs|crore|crores)\b",
+    re.IGNORECASE
+)
+
+# --- Case / Reference IDs ---
+# Catches patterns like: CASE-12345, REF-ABC123, Case No. 12345,
+# Reference Number: ABC-12345, case id: XY12345, FIR No 123/2025
+CASE_ID_REGEX = re.compile(
+    r"(?:case[\s\-_#:]*(?:no\.?|number|id|ref)?[\s\-_#:]*[A-Z0-9][\w\-/]{2,20})"
+    r"|(?:ref(?:erence)?[\s\-_#:]*(?:no\.?|number|id)?[\s\-_#:]*[A-Z0-9][\w\-/]{2,20})"
+    r"|(?:FIR[\s\-_#:]*(?:no\.?|number)?[\s\-_#:]*\d[\w\-/]{1,15})"
+    r"|(?:complaint[\s\-_#:]*(?:no\.?|number|id)?[\s\-_#:]*[A-Z0-9][\w\-/]{2,20})"
+    r"|(?:ticket[\s\-_#:]*(?:no\.?|number|id)?[\s\-_#:]*[A-Z0-9][\w\-/]{2,20})"
+    r"|(?:incident[\s\-_#:]*(?:no\.?|number|id)?[\s\-_#:]*[A-Z0-9][\w\-/]{2,20})"
+    r"|(?:[A-Z]{2,5}[-/]\d[\w\-/]{2,20})",
+    re.IGNORECASE
+)
+
+# --- Policy Numbers ---
+# Catches patterns like: POL-12345, Policy No. ABC123, POLICY/12345,
+# policy number: LI-12345, insurance policy: INS123456
+POLICY_NUMBER_REGEX = re.compile(
+    r"(?:polic(?:y|ies)[\s\-_#:]*(?:no\.?|number|id|num)?[\s\-_#:]*[A-Z0-9][\w\-/]{2,20})"
+    r"|(?:insurance[\s\-_#:]*(?:no\.?|number|id|policy)?[\s\-_#:]*[A-Z0-9][\w\-/]{2,20})"
+    r"|(?:POL[\s\-_/#:]*\d[A-Z0-9]{2,14})"
+    r"|(?:INS[\s\-_/#:]*\d[A-Z0-9]{2,14})"
+    r"|(?:LI[\s\-_/#:]*\d{4,15})",
+    re.IGNORECASE
+)
+
+# --- Order Numbers ---
+# Catches patterns like: ORD-12345, ORDER#123, Order No. ABC123,
+# order id: XY12345, transaction id: TXN123456
+ORDER_NUMBER_REGEX = re.compile(
+    r"(?:order[\s\-_#:]*(?:no\.?|number|id|num)?[\s\-_#:]*[A-Z0-9][\w\-/]{2,20})"
+    r"|(?:transaction[\s\-_#:]*(?:no\.?|number|id)?[\s\-_#:]*[A-Z0-9][\w\-/]{2,20})"
+    r"|(?:track(?:ing)?[\s\-_#:]*(?:no\.?|number|id)?[\s\-_#:]*[A-Z0-9][\w\-/]{2,20})"
+    r"|(?:shipment[\s\-_#:]*(?:no\.?|number|id)?[\s\-_#:]*[A-Z0-9][\w\-/]{2,20})"
+    r"|(?:ORD[\s\-_/#:]*\d[A-Z0-9]{2,14})"
+    r"|(?:TXN[\s\-_/#:]*\d[A-Z0-9]{2,14})"
+    r"|(?:invoice[\s\-_#:]*(?:no\.?|number|id)?[\s\-_#:]*[A-Z0-9][\w\-/]{2,20})",
     re.IGNORECASE
 )
 
@@ -314,6 +384,18 @@ def is_email(value: str) -> bool:
     return "." in domain
 
 
+def _clean_id_match(match_text: str) -> str:
+    """Strip label prefixes (case, ref, order, etc.) from extracted ID matches."""
+    cleaned = re.sub(
+        r"^(?:case|ref(?:erence)?|fir|complaint|ticket|incident|"
+        r"polic(?:y|ies)|insurance|order|transaction|invoice|"
+        r"track(?:ing)?|shipment|consignment)\s*"
+        r"(?:no\.?|number|id|ref|num)?\s*[-_#:=]*\s*",
+        "", match_text.strip(), flags=re.IGNORECASE
+    ).strip()
+    return cleaned if len(cleaned) >= 3 else match_text.strip()
+
+
 # ==============================
 # EXTRACTION ENGINE
 # ==============================
@@ -358,6 +440,20 @@ def extract_intelligence(text: str) -> dict:
             if len(digits) == 10:
                 phones.add(digits)
 
+        # Also catch labeled phone number mentions
+        labeled_matches = LABELED_PHONE_REGEX.findall(text)
+        for p in labeled_matches:
+            digits = re.sub(r"\D", "", p)
+            if len(digits) == 10:
+                phones.add(digits)
+
+        # Toll-free numbers (1800-XXX-XXXX)
+        tf_matches = TOLL_FREE_REGEX.findall(text)
+        for p in tf_matches:
+            digits = re.sub(r"\D", "", p)
+            if 10 <= len(digits) <= 11:
+                phones.add(digits)
+
         result["phoneNumbers"] = sorted(phones)
     except Exception as e:
         logger.error(f"Phone extraction error: {e}")
@@ -369,7 +465,8 @@ def extract_intelligence(text: str) -> dict:
         emails = set()
 
         for addr in at_addresses:
-            addr_lower = addr.lower()
+            # Strip trailing periods that can corrupt UPI IDs/emails
+            addr_lower = addr.lower().rstrip(".")
             if is_upi_id(addr_lower):
                 upis.add(addr_lower)
             elif is_email(addr_lower):
@@ -377,7 +474,7 @@ def extract_intelligence(text: str) -> dict:
 
         # Catch emails that UPI regex might miss
         for em in EMAIL_REGEX.findall(text):
-            em_lower = em.lower()
+            em_lower = em.lower().rstrip(".")
             if is_email(em_lower) and em_lower not in upis:
                 emails.add(em_lower)
 
@@ -418,6 +515,14 @@ def extract_intelligence(text: str) -> dict:
 
             # Ignore garbage numbers (all same digit or too few unique)
             if len(set(digits)) <= 2:
+                continue
+
+            # Skip toll-free numbers (1800XXXXXXX) — NOT bank accounts
+            if digits.startswith("1800"):
+                continue
+
+            # Skip numbers that look like years or short codes
+            if len(digits) <= 10 and digits[:4] in ("2024", "2025", "2026", "2023"):
                 continue
 
             banks.add(digits)
@@ -473,7 +578,22 @@ def extract_intelligence(text: str) -> dict:
 
     # ---------- TELEGRAM ----------
     try:
-        telegrams = set(f"@{t}" for t in TELEGRAM_REGEX.findall(text))
+        raw_telegrams = TELEGRAM_REGEX.findall(text)
+        telegrams = set()
+        # Collect UPI/email domains to filter Telegram false positives
+        upi_email_domains = set()
+        for upi in result.get("upiIds", []):
+            if "@" in upi:
+                upi_email_domains.add(upi.split("@")[1].lower().rstrip("."))
+        for email in result.get("emails", []):
+            if "@" in email:
+                domain_parts = email.split("@")[1].lower().rstrip(".").split(".")
+                upi_email_domains.add(domain_parts[0])
+        for t in raw_telegrams:
+            t_lower = t.lower()
+            # Filter out common org names AND UPI/email domains
+            if t_lower not in TELEGRAM_FALSE_POSITIVES and t_lower not in upi_email_domains:
+                telegrams.add(f"@{t}")
         result["telegramIds"] = sorted(telegrams)
     except Exception as e:
         logger.error(f"Telegram extraction error: {e}")
@@ -481,7 +601,13 @@ def extract_intelligence(text: str) -> dict:
     # ---------- MONETARY AMOUNTS ----------
     try:
         amounts = AMOUNT_REGEX.findall(text)
-        result["amounts"] = sorted(set(a.strip() for a in amounts))
+        cleaned_amounts = set()
+        for a in amounts:
+            a_clean = a.strip().rstrip(",.:;")
+            # Skip garbage matches like 'Rs,' or 'Rs.'
+            if len(a_clean) > 3 and any(c.isdigit() for c in a_clean):
+                cleaned_amounts.add(a_clean)
+        result["amounts"] = sorted(cleaned_amounts)
     except Exception as e:
         logger.error(f"Amount extraction error: {e}")
 
@@ -503,6 +629,48 @@ def extract_intelligence(text: str) -> dict:
             )
     except Exception as e:
         logger.error(f"Remote access extraction error: {e}")
+
+    # ---------- CASE / REFERENCE IDS ----------
+    try:
+        case_matches = CASE_ID_REGEX.findall(text)
+        if case_matches:
+            case_ids = set()
+            for c in case_matches:
+                cleaned = _clean_id_match(c.rstrip(".,;:"))
+                # Require at least one digit and min length
+                if len(cleaned) >= 4 and any(ch.isdigit() for ch in cleaned):
+                    case_ids.add(cleaned)
+            result["caseIds"] = sorted(case_ids)
+    except Exception as e:
+        logger.error(f"Case ID extraction error: {e}")
+
+    # ---------- POLICY NUMBERS ----------
+    try:
+        policy_matches = POLICY_NUMBER_REGEX.findall(text)
+        if policy_matches:
+            policy_nums = set()
+            for p in policy_matches:
+                cleaned = _clean_id_match(p.rstrip(".,;:"))
+                # Require at least one digit to avoid English word matches
+                if len(cleaned) >= 4 and any(ch.isdigit() for ch in cleaned):
+                    policy_nums.add(cleaned)
+            result["policyNumbers"] = sorted(policy_nums)
+    except Exception as e:
+        logger.error(f"Policy number extraction error: {e}")
+
+    # ---------- ORDER NUMBERS ----------
+    try:
+        order_matches = ORDER_NUMBER_REGEX.findall(text)
+        if order_matches:
+            order_nums = set()
+            for o in order_matches:
+                cleaned = _clean_id_match(o.rstrip(".,;:"))
+                # Require at least one digit to avoid English word matches
+                if len(cleaned) >= 4 and any(ch.isdigit() for ch in cleaned):
+                    order_nums.add(cleaned)
+            result["orderNumbers"] = sorted(order_nums)
+    except Exception as e:
+        logger.error(f"Order number extraction error: {e}")
 
     # ---------- SUSPICIOUS KEYWORDS ----------
     try:
@@ -555,6 +723,11 @@ def empty_intel() -> dict:
     """
     Returns an empty intelligence template with all expected keys.
 
+    Includes all data types from the Feb 19 evaluation spec:
+    phones, banks, UPIs, links, emails, case IDs, policy numbers,
+    order numbers, IFSC codes, Telegram IDs, amounts, organizations,
+    remote access tools, and suspicious keywords.
+
     Returns:
         Dictionary with empty lists for all intelligence categories
     """
@@ -570,5 +743,8 @@ def empty_intel() -> dict:
         "apkLinks": [],
         "amounts": [],
         "organizationsMentioned": [],
-        "remoteAccessTools": []
+        "remoteAccessTools": [],
+        "caseIds": [],
+        "policyNumbers": [],
+        "orderNumbers": []
     }

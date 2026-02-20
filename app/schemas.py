@@ -10,6 +10,9 @@ AgentReply:      Standard response with status and reply text.
 Note: Fields use Optional[Any] intentionally — the evaluator sends
 different formats across test scenarios, and strict typing would
 cause 422 validation errors.
+
+Updated for Feb 19 scoring rubric — includes all required and
+optional fields for maximum response structure points.
 """
 
 from pydantic import BaseModel, Field
@@ -51,13 +54,22 @@ class EngagementMetrics(BaseModel):
 
 
 class ExtractedIntelligence(BaseModel):
-    """Intelligence extracted from scammer messages."""
+    """
+    Intelligence extracted from scammer messages.
+
+    Includes all data types from Feb 19 evaluation spec:
+    phones, bank accounts, UPI IDs, links, emails, case IDs,
+    policy numbers, and order numbers.
+    """
+    phoneNumbers: List[str] = Field(default=[], description="Phone numbers found")
     bankAccounts: List[str] = Field(default=[], description="Bank account numbers found")
     upiIds: List[str] = Field(default=[], description="UPI IDs found")
     phishingLinks: List[str] = Field(default=[], description="Suspicious URLs found")
-    phoneNumbers: List[str] = Field(default=[], description="Phone numbers found")
     emailAddresses: List[str] = Field(default=[], description="Email addresses found")
     suspiciousKeywords: List[str] = Field(default=[], description="Scam indicator keywords found")
+    caseIds: List[str] = Field(default=[], description="Case/reference IDs found")
+    policyNumbers: List[str] = Field(default=[], description="Policy numbers found")
+    orderNumbers: List[str] = Field(default=[], description="Order/transaction IDs found")
 
 
 class AgentReply(BaseModel):
