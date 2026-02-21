@@ -281,14 +281,23 @@ def _build_context_prompt(conversation_text: str, turn_number: int = 0,
     """
     parts = []
 
-    # Turn awareness with pacing guidance
+    # Per-turn strategy (mirrors cosmosapiens #1 ranked approach)
+    TURN_STRATEGY = {
+        1: "Build trust. Express concern. Ask their FULL NAME and which company/organisation they represent.",
+        2: "Sound confused but cooperative. Ask for their official EMPLOYEE ID, badge number, and department name.",
+        3: "Hesitate. Say you want to verify. Ask for the company's REGISTERED NAME, registration number, and OFFICIAL WEBSITE URL.",
+        4: "Say you need to call them back. Ask for their DIRECT CALLBACK PHONE NUMBER and extension.",
+        5: "Stall for time. Mention 'papers' or 'files'. Ask for the CASE ID, complaint REFERENCE NUMBER, and filing date.",
+        6: "Ask if there is a processing fee or verification charge. Say you prefer UPI. ASK EXPLICITLY: 'What is your UPI ID so I can send the amount?'",
+        7: "Say you will do a bank transfer instead. ASK EXPLICITLY: 'Can you give me your BANK ACCOUNT NUMBER and IFSC code for the transfer?'",
+        8: "Express more hesitation. Say you need to speak with a senior officer. Ask supervisor's FULL NAME, designation, and DIRECT PHONE NUMBER.",
+        9: "Request written proof. Say your son/daughter needs it in writing. Ask for their OFFICIAL EMAIL ADDRESS.",
+        10: "Wrap up with lingering suspicion. Ask WHEN they will send official written documentation or a legal notice.",
+    }
+
     if turn_number > 0:
-        if turn_number <= 3:
-            parts.append(f"[Turn {turn_number}/10 — Build rapport. Ask who they are. Get their phone/email.]")
-        elif turn_number <= 6:
-            parts.append(f"[Turn {turn_number}/10 — Dig deeper. Ask for account numbers, UPI, links, case IDs.]")
-        else:
-            parts.append(f"[Turn {turn_number}/10 — DESPERATION MODE. Use stalling excuses: 'my app crashed', 'OTP is not coming', 'let me check with my son', 'battery dying, give me your number'. Extract any missing data urgently.]")
+        strategy = TURN_STRATEGY.get(turn_number, TURN_STRATEGY[10])
+        parts.append(f"[Turn {turn_number}/10 — {strategy}]")
 
     # Show what we already have
     if extracted_intel:
@@ -378,6 +387,25 @@ def generate_agent_reply(conversation_text: str, turn_number: int = 0,
         ]
 
         reply = call_llm(messages, temperature=0.75)
+
+        # ============================================================
+        # PAYMENT-TURN VALIDATION (turns 6 and 7)
+        # Cosmosapiens guarantees UPI elicitation on turn 6 and bank
+        # account + IFSC elicitation on turn 7. If LLM forgets, force it.
+        # ============================================================
+        if turn_number == 6:
+            reply_lower_check = reply.lower()
+            upi_terms = ["upi", "gpay", "google pay", "phonepe", "paytm", "bhim"]
+            if not any(t in reply_lower_check for t in upi_terms):
+                reply = reply.rstrip() + " By the way, if there is any processing fee, can I send it by UPI? What is your UPI ID?"
+                logger.info("Payment guardrail turn 6: injected UPI ask")
+
+        if turn_number == 7:
+            reply_lower_check = reply.lower()
+            bank_terms = ["account number", "bank account", "ifsc", "bank transfer", "acc no", "account no"]
+            if not any(t in reply_lower_check for t in bank_terms):
+                reply = reply.rstrip() + " Actually, I prefer bank transfer. Could you please share your bank account number and IFSC code?"
+                logger.info("Payment guardrail turn 7: injected bank account ask")
 
         # ============================================================
         # PRE-PROCESSING: Check for bot accusation FIRST
