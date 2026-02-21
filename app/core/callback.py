@@ -102,42 +102,37 @@ def classify_scam_type(session_data: dict) -> str:
 
 def calculate_confidence(session_data: dict) -> float:
     """
-    Calculate a confidence score (0.0 to 1.0) for the scam detection.
+    Calculate confidence score using the red-flag accumulation formula.
 
-    Considers number of suspicious keywords, intelligence extracted,
-    and conversation length to produce a realistic confidence value.
+    Formula (mirrors cosmosapiens #1 ranked approach):
+        confidence = min(0.95, 0.40 + red_flag_count * 0.10)
 
-    Args:
-        session_data: Full session dict with intelligence and metadata
+    With 5+ red flags (typical by turn 5): 0.40 + 0.50 = 0.90
+    With 3 red flags: 0.40 + 0.30 = 0.70
+    Cap at 0.95 to stay credible (not 1.0 perfect).
 
-    Returns:
-        Confidence float between 0.0 and 1.0
+    Red flags = suspicious keywords + distinct intel types found
+    (both are strong signals the interaction is a scam).
     """
     intel = session_data.get("intelligence", {})
-    score = 0.0
 
-    # Keywords contribute up to 0.3
+    # Count red flag signals: suspicious keywords detected
     keyword_count = len(intel.get("suspiciousKeywords", []))
-    score += min(keyword_count * 0.05, 0.3)
 
-    # Extracted intelligence contributes up to 0.4
-    intel_types_found = 0
-    for key in ["phoneNumbers", "bankAccounts", "upiIds", "phishingLinks",
-                "emailAddresses", "ifscCodes", "telegramIds", "caseIds",
-                "policyNumbers", "orderNumbers"]:
-        if intel.get(key):
-            intel_types_found += 1
-    score += min(intel_types_found * 0.08, 0.4)
+    # Count distinct intelligence types extracted (each is a red flag signal)
+    intel_types_found = sum(
+        1 for key in ["phoneNumbers", "bankAccounts", "upiIds", "phishingLinks",
+                      "emailAddresses", "ifscCodes", "telegramIds", "caseIds",
+                      "policyNumbers", "orderNumbers"]
+        if intel.get(key)
+    )
 
-    # Message count contributes up to 0.2
-    msg_count = session_data.get("totalMessages", 0)
-    score += min(msg_count * 0.025, 0.2)
+    red_flags = keyword_count + intel_types_found
 
-    # Base confidence if scam was detected
-    if session_data.get("scamDetected", False):
-        score += 0.1
+    # Core formula: base 0.40 + 0.10 per red flag, hard cap at 0.95
+    confidence = min(0.95, 0.40 + red_flags * 0.10)
 
-    return round(min(score, 1.0), 2)
+    return round(confidence, 2)
 
 
 def build_agent_notes(session_data: dict) -> str:
