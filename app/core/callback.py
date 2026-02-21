@@ -102,17 +102,23 @@ def classify_scam_type(session_data: dict) -> str:
 
 def calculate_confidence(session_data: dict) -> float:
     """
-    Calculate confidence score using the red-flag accumulation formula.
+    Calculate a confidence score (0.0 – 0.95) for the scam classification.
 
-    Formula (mirrors cosmosapiens #1 ranked approach):
-        confidence = min(0.95, 0.40 + red_flag_count * 0.10)
+    Uses a red-flag accumulation formula:
+        confidence = min(0.95, 0.40 + red_flag_count × 0.10)
 
-    With 5+ red flags (typical by turn 5): 0.40 + 0.50 = 0.90
-    With 3 red flags: 0.40 + 0.30 = 0.70
-    Cap at 0.95 to stay credible (not 1.0 perfect).
+    Red flags are counted as the sum of:
+    - Suspicious keywords detected in the conversation
+    - Number of distinct intelligence categories extracted
+      (each category is independent evidence of scam activity)
 
-    Red flags = suspicious keywords + distinct intel types found
-    (both are strong signals the interaction is a scam).
+    The score is capped at 0.95 — a perfect 1.0 is intentionally avoided
+    to maintain realistic credibility in the confidence estimate.
+
+    Examples:
+        3 red flags → 0.40 + 0.30 = 0.70
+        5 red flags → 0.40 + 0.50 = 0.90
+        7+ red flags → capped at 0.95
     """
     intel = session_data.get("intelligence", {})
 

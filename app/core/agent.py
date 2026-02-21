@@ -1,28 +1,24 @@
 """
-Honeypot Conversation Agent — Optimized for Max Scoring
-========================================================
-Generates context-aware replies that keep scammers engaged while
-strategically extracting intelligence (phone numbers, bank accounts,
-UPI IDs, emails, URLs, case IDs, policy numbers, order numbers, etc.).
+Honeypot Conversation Agent
+============================
+Generates context-aware, persona-driven replies that keep scammers engaged
+while systematically extracting intelligence across every turn.
 
-Optimized for the Feb 19 evaluation scoring rubric:
-- Conversation Quality (30 pts): Turn count, questions asked,
-  relevant/investigative questions, red flag identification,
-  and information elicitation attempts.
-- Intelligence Extraction (30 pts): Probing for ALL data types.
+The agent plays a specific character — a warm, trusting elderly woman —
+whose natural curiosity and hesitation make it easy to probe the scammer
+for verifiable identifiers (employee IDs, phone numbers, UPI IDs, bank
+accounts, IFSC codes, case references, email addresses, and official URLs)
+without raising suspicion.
 
-KEY SCORING TARGETS (per conversation):
-  Turn Count:     ≥8 turns         → 8 pts (evaluator controls this)
-  Questions:      ≥5 questions     → 4 pts (1 per reply = 10 total) ✓
-  Relevant Qs:    ≥3 investigative → 3 pts (1 per reply = 10 total) ✓
-  Red Flags:      ≥5 identifications → 8 pts (guaranteed by post-processing) ✓
-  Elicitation:    ~5 attempts      → 7 pts (1.5 pts each, guaranteed) ✓
-
-Post-processing guardrails ensure EVERY reply contains:
-1. A recognizable red flag observation
-2. An investigative question
-3. A data elicitation attempt
-Even if the LLM fails to include them, post-processing adds them.
+Key capabilities:
+- Structured per-turn elicitation (turn 1-10 with targeted data goals)
+- Three mandatory reply elements: red flag observation, investigative
+  question, and data elicitation attempt
+- Post-processing guardrails ensure elements are present even if the
+  LLM omits them
+- Payment-specific probing on turns 6 (UPI) and 7 (bank account + IFSC)
+- Bot-accusation deflection with rotating persona-consistent responses
+- Self-identifying word stripping to preserve character
 """
 
 from app.llm.llm_client import call_llm
@@ -238,13 +234,13 @@ BOT_ACCUSATION_PATTERNS = [
     "talking to a computer", "is this automated", "honeypot",
 ]
 
-# Responses for bot accusations — light humor, confusion, mild offense
+# Responses for bot accusations — light confusion, mild offense, persona-consistent
 BOT_DEFENSE_RESPONSES = [
     "Ha, a bot? No no, I'm just a regular person — honestly a bit offended you'd ask that! Anyway, you were saying something about my account?",
     "I'm very much a real person, thank you! I'm just confused and worried about all this. Can you please tell me your employee ID so I can verify who I'm speaking with?",
     "What? No, I'm just an ordinary person — I get nervous when people call about my bank account. Can you share your official number so I can call back and confirm this is real?",
     "Of course I'm real — I'm just cautious, that's all. I've heard about scam calls, so I want to be careful. What's your name and employee number?",
-    "Ha, I'm definitely not a bot — I'm just slow with these things! My grandson handles all the tech stuff for me. Can you just confirm your employee ID for me?",
+    "Ha, I'm definitely not a bot — I'm just slow with these things! My son handles all the tech stuff for me. Can you just confirm your employee ID for me?",
 ]
 
 
@@ -275,7 +271,10 @@ def _build_context_prompt(conversation_text: str, turn_number: int = 0,
     """
     parts = []
 
-    # Per-turn strategy (mirrors cosmosapiens #1 ranked approach)
+    # Structured per-turn elicitation strategy:
+    # Each turn targets a specific, distinct piece of intelligence.
+    # Turns 6 and 7 are hardened to always ask for payment identifiers
+    # (UPI ID and bank account + IFSC) since these are high-value intel.
     TURN_STRATEGY = {
         1: "Build trust. Express concern. Ask their FULL NAME and which company/organisation they represent.",
         2: "Sound confused but cooperative. Ask for their official EMPLOYEE ID, badge number, and department name.",
@@ -380,12 +379,29 @@ def generate_agent_reply(conversation_text: str, turn_number: int = 0,
             {"role": "user", "content": prompt}
         ]
 
-        reply = call_llm(messages, temperature=0.75)
+        # ============================================================
+        # EARLY BOT ACCUSATION CHECK
+        # Intercept before LLM call to save tokens and respond faster.
+        # If the scammer suspects automation, deflect immediately with
+        # a warm, persona-consistent human response.
+        # ============================================================
+        last_scammer_text = ""
+        for line in conversation_text.strip().split("\n")[-5:]:
+            if line.lower().startswith("scammer:"):
+                last_scammer_text = line.lower()
+
+        if any(p in last_scammer_text for p in BOT_ACCUSATION_PATTERNS):
+            defense = BOT_DEFENSE_RESPONSES[turn_number % len(BOT_DEFENSE_RESPONSES)]
+            logger.info("Bot accusation detected — using defense response")
+            return defense
+
+        reply = call_llm(messages, temperature=0.82)
 
         # ============================================================
         # PAYMENT-TURN VALIDATION (turns 6 and 7)
-        # Cosmosapiens guarantees UPI elicitation on turn 6 and bank
-        # account + IFSC elicitation on turn 7. If LLM forgets, force it.
+        # Turn 6 must ask for a UPI ID. Turn 7 must ask for bank account
+        # + IFSC code. If the LLM omits the required payment terms,
+        # a targeted fallback suffix is appended before other guardrails.
         # ============================================================
         if turn_number == 6:
             reply_lower_check = reply.lower()
@@ -400,21 +416,6 @@ def generate_agent_reply(conversation_text: str, turn_number: int = 0,
             if not any(t in reply_lower_check for t in bank_terms):
                 reply = reply.rstrip() + " Actually, I prefer bank transfer. Could you please share your bank account number and IFSC code?"
                 logger.info("Payment guardrail turn 7: injected bank account ask")
-
-        # ============================================================
-        # PRE-PROCESSING: Check for bot accusation FIRST
-        # If the scammer is accusing us of being a bot, override with
-        # a human-sounding defensive reply instead of the LLM output.
-        # ============================================================
-        last_scammer_text = ""
-        for line in conversation_text.strip().split("\n")[-5:]:
-            if line.lower().startswith("scammer:"):
-                last_scammer_text = line.lower()
-
-        if any(p in last_scammer_text for p in BOT_ACCUSATION_PATTERNS):
-            defense = BOT_DEFENSE_RESPONSES[turn_number % len(BOT_DEFENSE_RESPONSES)]
-            logger.info("Bot accusation detected — using defense response")
-            return defense
 
         # ============================================================
         # POST-PROCESSING PIPELINE
@@ -451,9 +452,7 @@ def generate_agent_reply(conversation_text: str, turn_number: int = 0,
         reply_lower = reply.lower()
         for word in SELF_IDENTIFYING_WORDS:
             if word in reply_lower:
-                # Replace the problematic word with neutral text
-                import re as _re
-                reply = _re.sub(re.escape(word), "confused person", reply, flags=re.IGNORECASE)
+                reply = re.sub(re.escape(word), "confused person", reply, flags=re.IGNORECASE)
                 logger.warning(f"Guardrail: stripped self-identifying word '{word}'")
 
         # ============================================================

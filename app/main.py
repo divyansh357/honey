@@ -353,11 +353,13 @@ async def honeypot_endpoint(
                 except Exception as e:
                     logger.error(f"[CALLBACK BG ERROR] {e}")
 
-            # Use asyncio.create_task when inside async endpoint, fall back to thread
+            # Inside an async endpoint we always have a running loop—
+            # use run_in_executor to dispatch the blocking callback call
+            # to the default thread-pool without blocking the event loop.
             try:
-                loop = asyncio.get_event_loop()
+                loop = asyncio.get_running_loop()
                 loop.run_in_executor(None, _send_bg)
-            except Exception:
+            except RuntimeError:
                 t = threading.Thread(target=_send_bg, daemon=True)
                 t.start()
 

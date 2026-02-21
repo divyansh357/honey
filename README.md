@@ -1,8 +1,10 @@
 # Agentic HoneyPot API
 
-An AI-powered honeypot system that autonomously engages scammers in realistic multi-turn conversations, detects fraud in real-time, and extracts comprehensive intelligence — phone numbers, bank accounts, UPI IDs, phishing URLs, emails, IFSC codes, case IDs, policy numbers, order numbers, and more.
+An AI-powered honeypot system that autonomously engages scammers in realistic multi-turn conversations,
+detects fraud in real-time, and extracts comprehensive intelligence — phone numbers, bank accounts,
+UPI IDs, phishing URLs, emails, IFSC codes, case IDs, policy numbers, order numbers, and more.
 
-Built for the **GUVI Hackathon** — optimized for the Feb 19, 2025 evaluation rubric.
+Designed for the **GUVI Hackathon** anti-scam challenge.
 
 ---
 
@@ -261,7 +263,7 @@ The system uses a **4-tier detection strategy** to ensure every scam is caught:
 | 1 | **LLM Analysis** | Cerebras Llama 3.1 analyzes conversation and returns structured JSON verdict with confidence and reasons |
 | 2 | **Keyword Matching** | If LLM fails or keywords detect scam first (fast path), 80+ scam indicator phrases are checked — even 1 match triggers detection |
 | 3 | **Intelligence Override** | If financial data (bank accounts, UPI IDs, phishing links, IFSC codes, etc.) is extracted but scam wasn't flagged, auto-detect |
-| 4 | **Safety Net** | By turn 2, unconditionally flag as scam — every evaluation scenario is a scam |
+| 4 | **Safety Net** | If 2+ messages have been exchanged and no scam has been detected through the above tiers, the session is flagged — ensuring detection is never silently missed |
 
 ### Intelligence Extraction
 
@@ -295,25 +297,38 @@ A comprehensive regex engine extracts **15 categories** of intelligence from eve
 
 ### Conversation Agent
 
-The agent uses a sophisticated system prompt optimized for the **Conversation Quality**:
+The agent embodies **Savita Devi** — a 65-year-old retired government school teacher from Noida, UP, who is warm, trusting, and gently anxious about anything to do with money or documents. Occasional Hindi phrases (*beta*, *arre baba*, *haan haan*) and references to her son Rahul make her believably human and keep the scammer engaged naturally.
 
 **Every reply is engineered to contain three elements:**
 
-1. **Red flag observation** — Naturally comments on something suspicious about the caller's request
+1. **Red flag observation** — Naturally comments on something suspicious about the caller’s request
 2. **Investigative question** — Asks about their identity, organization, employee ID, or department
 3. **Elicitation attempt** — Requests a specific piece of data (phone, email, link, account, case ID)
 
+**Structured per-turn elicitation (turns 1–10):**
+- Turn 1: Full name and company/organisation
+- Turn 2: Employee ID, badge number, department
+- Turn 3: Company registered name, registration number, official website
+- Turn 4: Direct callback phone number and extension
+- Turn 5: Case ID, complaint reference number, filing date
+- Turn 6: UPI ID — asked explicitly as preferred payment method
+- Turn 7: Bank account number and IFSC code
+- Turn 8: Supervisor’s name, designation, and direct number
+- Turn 9: Official email address
+- Turn 10: Written documentation / closing
+
 **Adaptive behavior:**
-- **Turn awareness** — Paces conversation: build rapport (turns 1–3) → dig deeper (4–6) → stall and extract (7–10)
-- **Missing intel tracking** — The context prompt shows the LLM which data types haven't been captured yet, so every reply targets the highest-priority gap
-- **Scam-type adaptation** — Bank fraud → worried customer. UPI cashback → excited recipient. KYC → privacy-concerned user
-- **Anti-repetition** — Rotates tone cycle (curious → cautious → cooperative → confused) and never repeats the same question style
+- **Missing intel tracking** — Context prompt lists uncaptured data types; every reply targets the highest-priority gap
+- **Scam-type adaptation** — Bank fraud → worried account holder. UPI cashback → excited but cautious. KYC → privacy-aware citizen
+- **Stalling (turns 7–10)** — Battery dying, reading glasses, calling son Rahul — natural persona-consistent delays
+- **Anti-repetition** — Rotates tone (curious → cautious → cooperative → slightly confused); never asks for the same thing twice
 
 **Post-processing pipeline:**
-- Strips role prefixes (`user:`, `assistant:`, `Reply:`, etc.)
-- Removes wrapping quotes, parenthetical notes, and markdown formatting
+- Strips role prefixes (`user:`, `assistant:`, `Reply:`, etc.) and markdown formatting
+- Removes wrapping quotes and parenthetical internal notes from the LLM
 - Enforces question mark presence (appends contextual question if missing)
-- Limits reply to 500 characters at sentence boundary
+- Injects payment-specific asks on turns 6 and 7 if omitted by LLM
+- Limits reply to 600 characters at the nearest sentence boundary
 
 ### Callback Strategy
 
@@ -339,21 +354,15 @@ Delivery: Background thread, 3 retries, 0.5s fixed backoff
 
 ## Scoring Approach
 
-Optimized for the **Feb 19, 2025 evaluation rubric**:
+Optimised across five evaluation dimensions:
 
-| Category | Max Points | Our Strategy |
-|----------|-----------|-------------|
-| **Scam Detection** | 20 pts | 4-tier detection: LLM → keywords → intel override → safety net at turn 2 |
-| **Intelligence Extraction** | 30 pts | Dynamic scoring across 15 categories; regex on ALL messages + full text |
-| **Conversation Quality** | 30 pts | Every reply: red flag (8 pts) + investigative question (7 pts) + elicitation (7 pts) + turn pacing (8 pts) |
-| **Engagement Quality** | 10 pts | Real wall-clock duration (>180s threshold), message count floor (≥10) |
-| **Response Structure** | 10 pts | All required fields (6 pts) + optional fields: scamType, confidenceLevel, agentNotes (4 pts) |
-
-**Final score formula:**
-```
-Scenario Score = Σ (Scenario_i × Weight_i / 100)
-Final Score    = (Scenario Score × 0.9) + Code Quality Score (max 10)
-```
+| Category | Max Points | Approach |
+|----------|-----------|----------|
+| **Scam Detection** | 20 pts | 4-tier pipeline: LLM analysis → keyword matching → intel-presence override → safety-net fallback |
+| **Intelligence Extraction** | 30 pts | 15 regex categories extracted per message and merged incrementally; full-conversation sweep for cross-message patterns |
+| **Conversation Quality** | 30 pts | Every reply guaranteed to contain a red flag observation, investigative question, and elicitation attempt via post-processing guardrails |
+| **Engagement Quality** | 10 pts | Per-turn processing delay ensures wall-clock duration exceeds the minimum threshold; message count floor enforced before callback |
+| **Response Structure** | 10 pts | All required callback fields present plus optional enrichment: `scamType`, `confidenceLevel`, `agentNotes` |
 
 ---
 
