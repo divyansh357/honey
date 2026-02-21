@@ -25,10 +25,15 @@ logger = logging.getLogger(__name__)
 SESSION_FILE: str = "sessions.json"
 session_lock: Lock = Lock()
 
+# In-memory cache — avoids repeated disk reads.
+# Sessions are loaded from disk once, then served from memory.
+# Disk writes still happen on update_session for persistence.
+_cache: dict | None = None
+
 
 def load_sessions() -> dict:
     """
-    Load all sessions from the JSON file.
+    Load sessions — from memory cache first, disk only on cold start.
 
     Thread-safe read with corruption recovery — if the file is
     malformed, returns empty dict instead of crashing.
@@ -36,19 +41,29 @@ def load_sessions() -> dict:
     Returns:
         Dict mapping session IDs to session data
     """
+    global _cache
+
+    # Serve from memory if available (fast path)
+    if _cache is not None:
+        return _cache
+
+    # Cold start: load from disk once
     if not os.path.exists(SESSION_FILE):
-        return {}
+        _cache = {}
+        return _cache
 
     with session_lock:
         try:
             with open(SESSION_FILE, "r") as f:
-                return json.load(f)
+                _cache = json.load(f)
         except json.JSONDecodeError:
             logger.warning("sessions.json corrupted — resetting safely")
-            return {}
+            _cache = {}
         except Exception as e:
             logger.error(f"Failed to load sessions: {e}")
-            return {}
+            _cache = {}
+
+    return _cache
 
 
 # ---------- ATOMIC FILE WRITE ----------
@@ -57,18 +72,20 @@ def save_sessions(sessions: dict) -> None:
     """
     Persist all sessions to JSON file using atomic write.
 
-    Writes to a temporary file first, then atomically replaces
-    the original to prevent corruption from partial writes.
+    Also updates the in-memory cache so subsequent reads are instant.
 
     Args:
         sessions: Complete sessions dict to persist
     """
+    global _cache
+    _cache = sessions  # Update memory cache immediately
+
     temp_file = SESSION_FILE + ".tmp"
 
     with session_lock:
         try:
             with open(temp_file, "w") as f:
-                json.dump(sessions, f, indent=2)
+                json.dump(sessions, f, separators=(',', ':'))  # compact JSON = faster write
             os.replace(temp_file, SESSION_FILE)
         except Exception as e:
             logger.error(f"Failed to save sessions: {e}")

@@ -39,6 +39,37 @@ GROQ_MODEL = "llama-3.3-70b-versatile"
 CEREBRAS_API_URL = "https://api.cerebras.ai/v1/chat/completions"
 CEREBRAS_MODEL = "llama3.1-8b"
 
+# ====== HTTP Connection Pooling ======
+# Reuse TCP+TLS connections across requests — saves ~100-200ms per call
+# that would otherwise be spent on TCP handshake + TLS negotiation.
+
+_groq_session: requests.Session | None = None
+_cerebras_session: requests.Session | None = None
+
+
+def _get_groq_session() -> requests.Session:
+    """Lazily initialize and return the Groq HTTP session."""
+    global _groq_session
+    if _groq_session is None:
+        _groq_session = requests.Session()
+        _groq_session.headers.update({
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json"
+        })
+    return _groq_session
+
+
+def _get_cerebras_session() -> requests.Session:
+    """Lazily initialize and return the Cerebras HTTP session."""
+    global _cerebras_session
+    if _cerebras_session is None:
+        _cerebras_session = requests.Session()
+        _cerebras_session.headers.update({
+            "Authorization": f"Bearer {CEREBRAS_API_KEY}",
+            "Content-Type": "application/json"
+        })
+    return _cerebras_session
+
 # Safety refusal phrases — if LLM returns these, use fallback instead
 REFUSAL_PHRASES = [
     "cannot assist", "can't assist", "cannot help", "cannot provide",
@@ -68,13 +99,25 @@ def _call_provider(api_url: str, api_key: str, model: str,
     Generic OpenAI-compatible API call. Works with Groq, Cerebras,
     and any other OpenAI-compatible provider.
 
+    Uses persistent HTTP sessions for connection pooling when available.
+
     Returns the generated text, or None if the call fails for any reason
     (rate limit, server error, safety refusal, timeout).
     """
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json"
-    }
+    # Pick the pooled session if one exists for this provider,
+    # otherwise fall back to a one-shot request
+    if api_url == GROQ_API_URL and GROQ_API_KEY:
+        http = _get_groq_session()
+        headers = None  # already set on session
+    elif api_url == CEREBRAS_API_URL:
+        http = _get_cerebras_session()
+        headers = None
+    else:
+        http = requests
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
 
     payload = {
         "model": model,
@@ -84,7 +127,7 @@ def _call_provider(api_url: str, api_key: str, model: str,
     }
 
     try:
-        response = requests.post(api_url, headers=headers, json=payload, timeout=timeout)
+        response = http.post(api_url, headers=headers, json=payload, timeout=timeout)
 
         # Rate limit — return None to trigger fallback
         if response.status_code == 429:

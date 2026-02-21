@@ -291,7 +291,7 @@ A comprehensive regex engine extracts **15 categories** of intelligence from eve
 
 ### Conversation Agent
 
-The agent uses a sophisticated system prompt optimized for the **Conversation Quality** scoring category (30 points):
+The agent uses a sophisticated system prompt optimized for the **Conversation Quality**:
 
 **Every reply is engineered to contain three elements:**
 

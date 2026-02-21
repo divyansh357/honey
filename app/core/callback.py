@@ -423,7 +423,7 @@ def send_final_callback(session_id: str, session_data: dict) -> bool:
                 GUVI_CALLBACK_URL,
                 json=payload,
                 headers={"Content-Type": "application/json"},
-                timeout=10
+                timeout=5
             )
 
             logger.info(f"[CALLBACK] Response status: {response.status_code}")
@@ -443,9 +443,9 @@ def send_final_callback(session_id: str, session_data: dict) -> bool:
         except Exception as e:
             logger.error(f"[CALLBACK ERROR] {e} — Attempt {attempt + 1}/{MAX_RETRIES}")
 
-        # Exponential backoff between retries
+        # Quick retry — callback runs on background thread so no blocking
         if attempt < MAX_RETRIES - 1:
-            time.sleep(2 ** attempt)
+            time.sleep(0.5)
 
     logger.error(f"[CALLBACK FAILED] All retries exhausted for session={session_id}")
     return False
