@@ -137,7 +137,8 @@ honey/
 ### Prerequisites
 
 - Python 3.8 or higher
-- A [Cerebras Cloud](https://cloud.cerebras.ai/) API key
+- A [Groq Cloud](https://console.groq.com/keys) API key (primary LLM — free tier)
+- A [Cerebras Cloud](https://cloud.cerebras.ai/) API key (fallback LLM — free tier)
 - (Optional) A [Railway](https://railway.app/) account for deployment
 
 ### Local Development
@@ -378,7 +379,7 @@ Railway settings (in `railway.json`):
 - **Health check:** `GET /` with 30s timeout
 - **Restart policy:** On failure, max 5 retries
 
-Set `API_KEY` and `CEREBRAS_API_KEY` in Railway's environment variable dashboard.
+Set `API_KEY`, `CEREBRAS_API_KEY`, and `GROQ_API_KEY` in Railway's environment variable dashboard.
 
 ### Docker (Alternative)
 
