@@ -131,7 +131,7 @@ def get_or_create_session(session_id: str) -> dict:
                 "phishingLinks": [],
                 "phoneNumbers": [],
                 "suspiciousKeywords": [],
-                "emails": [],
+                "emailAddresses": [],
                 "ifscCodes": [],
                 "telegramIds": [],
                 "apkLinks": [],

@@ -123,7 +123,7 @@ def calculate_confidence(session_data: dict) -> float:
     # Extracted intelligence contributes up to 0.4
     intel_types_found = 0
     for key in ["phoneNumbers", "bankAccounts", "upiIds", "phishingLinks",
-                "emails", "ifscCodes", "telegramIds", "caseIds",
+                "emailAddresses", "ifscCodes", "telegramIds", "caseIds",
                 "policyNumbers", "orderNumbers"]:
         if intel.get(key):
             intel_types_found += 1
@@ -199,8 +199,8 @@ def build_agent_notes(session_data: dict) -> str:
         nums = ", ".join(intel["phoneNumbers"][:3])
         notes.append(f"INTEL EXTRACTED: Contact phone numbers ({nums})")
 
-    if intel.get("emails"):
-        emails = ", ".join(intel["emails"][:3])
+    if intel.get("emailAddresses"):
+        emails = ", ".join(intel["emailAddresses"][:3])
         notes.append(f"INTEL EXTRACTED: Email addresses ({emails})")
 
     # Case IDs, Policy Numbers, Order Numbers
@@ -354,7 +354,7 @@ def send_final_callback(session_id: str, session_data: dict) -> bool:
         "bankAccounts": intel.get("bankAccounts", []),
         "upiIds": intel.get("upiIds", []),
         "phishingLinks": sorted(all_links),
-        "emailAddresses": intel.get("emails", []),
+        "emailAddresses": intel.get("emailAddresses", []),
         "suspiciousKeywords": intel.get("suspiciousKeywords", []),
         "caseIds": intel.get("caseIds", []),
         "policyNumbers": intel.get("policyNumbers", []),

@@ -272,8 +272,8 @@ def _build_context_prompt(conversation_text: str, turn_number: int = 0,
             captured.append(f"accounts: {', '.join(extracted_intel['bankAccounts'][:3])}")
         if extracted_intel.get("upiIds"):
             captured.append(f"UPIs: {', '.join(extracted_intel['upiIds'][:3])}")
-        if extracted_intel.get("emails"):
-            captured.append(f"emails: {', '.join(extracted_intel['emails'][:3])}")
+        if extracted_intel.get("emailAddresses"):
+            captured.append(f"emails: {', '.join(extracted_intel['emailAddresses'][:3])}")
         if extracted_intel.get("phishingLinks"):
             captured.append(f"links: {', '.join(extracted_intel['phishingLinks'][:2])}")
         if extracted_intel.get("caseIds"):
@@ -294,7 +294,7 @@ def _build_context_prompt(conversation_text: str, turn_number: int = 0,
             missing.append("bank account number")
         if not extracted_intel.get("upiIds"):
             missing.append("UPI ID")
-        if not extracted_intel.get("emails"):
+        if not extracted_intel.get("emailAddresses"):
             missing.append("email address")
         if not extracted_intel.get("phishingLinks"):
             missing.append("website link or URL")

@@ -479,7 +479,7 @@ def extract_intelligence(text: str) -> dict:
                 emails.add(em_lower)
 
         result["upiIds"] = sorted(upis)
-        result["emails"] = sorted(emails)
+        result["emailAddresses"] = sorted(emails)
     except Exception as e:
         logger.error(f"UPI/Email extraction error: {e}")
 
@@ -588,7 +588,7 @@ def extract_intelligence(text: str) -> dict:
         for upi in result.get("upiIds", []):
             if "@" in upi:
                 upi_email_domains.add(upi.split("@")[1].lower().rstrip("."))
-        for email in result.get("emails", []):
+        for email in result.get("emailAddresses", []):
             if "@" in email:
                 domain_parts = email.split("@")[1].lower().rstrip(".").split(".")
                 upi_email_domains.add(domain_parts[0])
@@ -740,7 +740,7 @@ def empty_intel() -> dict:
         "phoneNumbers": [],
         "bankAccounts": [],
         "suspiciousKeywords": [],
-        "emails": [],
+        "emailAddresses": [],
         "ifscCodes": [],
         "telegramIds": [],
         "apkLinks": [],

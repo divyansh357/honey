@@ -282,7 +282,7 @@ def honeypot_endpoint(
             accumulated_intel.get("bankAccounts"),
             accumulated_intel.get("upiIds"),
             accumulated_intel.get("phishingLinks"),
-            accumulated_intel.get("emails"),
+            accumulated_intel.get("emailAddresses"),
             accumulated_intel.get("ifscCodes"),
             accumulated_intel.get("telegramIds"),
             accumulated_intel.get("remoteAccessTools"),
