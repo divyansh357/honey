@@ -236,6 +236,16 @@ def honeypot_endpoint(
         session["intelligence"] = accumulated_intel
         session["_extracted_msg_count"] = len(rebuilt_messages)
 
+        # Safety net: also extract from the full concatenated conversation text.
+        # This catches patterns that span across messages (e.g., a number split
+        # across two messages) at minimal cost (single regex pass, ~1-2ms).
+        try:
+            full_text_intel = extract_intelligence(conversation_text)
+            accumulated_intel = merge_intelligence(accumulated_intel, full_text_intel)
+            session["intelligence"] = accumulated_intel
+        except Exception as e:
+            logger.error(f"Full-text extraction error: {e}")
+
         # Log extracted intelligence for debugging
         non_empty = {k: v for k, v in accumulated_intel.items()
                      if v and k != "suspiciousKeywords"}

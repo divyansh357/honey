@@ -33,7 +33,7 @@ Built for the **GUVI Hackathon** — optimized for the Feb 19, 2025 evaluation r
 - **15+ intelligence categories** — Regex-powered extraction of phone numbers, bank accounts, UPI IDs, emails, phishing URLs, IFSC codes, Telegram handles, case IDs, policy numbers, order numbers, monetary amounts, organization names, remote access tools, and suspicious keywords
 - **Adaptive conversation agent** — Persona-driven replies containing red flag observations, investigative questions, and data elicitation attempts in every response
 - **Scam-type awareness** — Automatically classifies and adapts to bank fraud, UPI fraud, phishing, lottery/investment scams, KYC fraud, tech support scams, and government impersonation
-- **Real-time callback** — Sends intelligence to the evaluator on every turn with retry logic and exponential backoff
+- **Real-time callback** — Sends intelligence to the evaluator on every turn with retry logic and fast backoff
 - **Fault-tolerant** — Global exception handling ensures 200 responses always; LLM failures degrade gracefully to keyword detection + fallback replies
 - **Thread-safe persistence** — Atomic file writes with locking for concurrent session management
 
@@ -93,9 +93,10 @@ Built for the **GUVI Hackathon** — optimized for the Feb 19, 2025 evaluation r
 |-----------|-----------|
 | **Language** | Python 3.8+ |
 | **Framework** | FastAPI |
-| **LLM Provider** | Cerebras Cloud API (Llama 3.1 8B) |
+| **Primary LLM** | Groq Cloud API (Llama 3.3 70B Versatile) |
+| **Fallback LLM** | Cerebras Cloud API (Llama 3.1 8B) |
 | **Validation** | Pydantic v2 |
-| **HTTP Client** | Requests |
+| **HTTP Client** | Requests (persistent connection pooling) |
 | **Server** | Uvicorn (ASGI) |
 | **Deployment** | Railway (Nixpacks) |
 
@@ -120,7 +121,7 @@ honey/
 │   │   └── callback.py          # GUVI evaluator callback with retry logic
 │   └── llm/
 │       ├── __init__.py          # LLM package marker
-│       └── llm_client.py        # Cerebras API client with fallback handling
+│       └── llm_client.py        # Dual-LLM client (Groq 70B primary + Cerebras 8B fallback) with connection pooling
 ├── requirements.txt             # Python dependencies
 ├── .env.example                 # Environment variable template
 ├── .gitignore                   # Git ignore rules
@@ -171,9 +172,10 @@ The API will be available at `http://localhost:8000`.
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `API_KEY` | Authentication key for the `x-api-key` header | Yes |
-| `CEREBRAS_API_KEY` | Cerebras Cloud API key for LLM inference | Yes |
+| `CEREBRAS_API_KEY` | Cerebras Cloud API key for fallback LLM inference | Yes |
+| `GROQ_API_KEY` | Groq Cloud API key for primary LLM (70B) — improves conversation quality. Falls back to Cerebras automatically if not set. | No |
 
-Both variables must be set in a `.env` file or as system environment variables. The application will raise a `RuntimeError` at startup if either is missing.
+`API_KEY` and `CEREBRAS_API_KEY` must be set in a `.env` file or as system environment variables. The application will raise a `RuntimeError` at startup if either is missing.
 
 ---
 
@@ -256,7 +258,7 @@ The system uses a **4-tier detection strategy** to ensure every scam is caught:
 | Tier | Method | Trigger |
 |------|--------|---------|
 | 1 | **LLM Analysis** | Cerebras Llama 3.1 analyzes conversation and returns structured JSON verdict with confidence and reasons |
-| 2 | **Keyword Matching** | If LLM fails or misses, 80+ scam indicator phrases are checked — even 1 match triggers detection |
+| 2 | **Keyword Matching** | If LLM fails or keywords detect scam first (fast path), 80+ scam indicator phrases are checked — even 1 match triggers detection |
 | 3 | **Intelligence Override** | If financial data (bank accounts, UPI IDs, phishing links, IFSC codes, etc.) is extracted but scam wasn't flagged, auto-detect |
 | 4 | **Safety Net** | By turn 2, unconditionally flag as scam — every evaluation scenario is a scam |
 
@@ -283,7 +285,8 @@ A comprehensive regex engine extracts **15 categories** of intelligence from eve
 | Order/Transaction IDs | `ORD-XXXX`, `TXN-XXXX`, tracking/invoice numbers | `405-789456789` |
 
 **Key design decisions:**
-- Extraction runs on **all messages** (scammer + agent) and the full concatenated conversation text
+- Incremental extraction — only processes NEW messages each turn, merging with previously captured intel for O(1) per-turn cost
+- Full-text safety net — also runs extraction on the complete conversation to catch cross-message patterns
 - UPI vs. email classification uses domain analysis — no TLD = UPI, known email domain = email
 - Bank accounts are filtered against phone numbers, toll-free numbers (`1800…`), year-prefixed codes (`2024…`), and country-code variants
 - Telegram handles are filtered against 30+ false positives (org names, UPI/email domains)
@@ -328,7 +331,7 @@ The callback is sent on **every request** after scam detection to ensure the eva
 │  confidenceLevel    (optional, 1 pt)  │
 └───────────────────────────────────────┘
 
-Delivery: Background thread, 3 retries, exponential backoff
+Delivery: Background thread, 3 retries, 0.5s fixed backoff
 ```
 
 ---
