@@ -295,7 +295,7 @@ def build_agent_notes(session_data: dict) -> str:
     return header + "Scammer " + "; ".join(notes) + "."
 
 
-def send_final_callback(session_id: str, session_data: dict) -> bool:
+def send_final_callback(session_id: str, session_data: dict, callback_url: str = None) -> bool:
     """
     Send intelligence report to GUVI evaluator endpoint.
 
@@ -406,6 +406,9 @@ def send_final_callback(session_id: str, session_data: dict) -> bool:
         "confidenceLevel": confidence,                   # 1 pt
     }
 
+    # Use dynamic URL from request body if provided, else default
+    target_url = callback_url or GUVI_CALLBACK_URL
+
     logger.info(f"[CALLBACK] Sending for session={session_id}")
     logger.info(f"[CALLBACK] Intel: phones={len(formatted_phones)}, "
                 f"accounts={len(formatted_intel['bankAccounts'])}, "
@@ -423,7 +426,7 @@ def send_final_callback(session_id: str, session_data: dict) -> bool:
     for attempt in range(MAX_RETRIES):
         try:
             response = requests.post(
-                GUVI_CALLBACK_URL,
+                target_url,
                 json=payload,
                 headers={"Content-Type": "application/json"},
                 timeout=5

@@ -43,6 +43,7 @@ from app.core.scam_detector import detect_scam
 from app.core.agent import generate_agent_reply
 from app.core.intelligence import extract_intelligence, merge_intelligence, empty_intel
 from app.core.callback import send_final_callback
+from keep_alive import start_keep_alive
 
 # Configure logging for production visibility
 logging.basicConfig(
@@ -56,6 +57,9 @@ app = FastAPI(
     description="AI-powered honeypot that engages scammers and extracts intelligence",
     version="2.0.0"
 )
+
+# Start keep-alive pinger to prevent Railway/Render sleep during evaluation
+start_keep_alive()
 
 
 # ---------- GLOBAL EXCEPTION HANDLER ----------
@@ -332,10 +336,13 @@ def honeypot_endpoint(
         if session["scamDetected"]:
             # Lightweight snapshot — json roundtrip is ~10x faster than deepcopy
             session_snapshot = json.loads(json.dumps(session))
+            # Use callback URL from request body if provided (GUVI may send it dynamically)
+            callback_url_override = getattr(data, 'callbackUrl', None) or None
 
             def _send_bg():
                 try:
-                    send_final_callback(session_id, session_snapshot)
+                    send_final_callback(session_id, session_snapshot,
+                                        callback_url=callback_url_override)
                 except Exception as e:
                     logger.error(f"[CALLBACK BG ERROR] {e}")
 

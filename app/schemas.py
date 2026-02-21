@@ -45,6 +45,8 @@ class IncomingRequest(BaseModel):
     message: Optional[Any] = Field(default=None, description="Current scammer message (dict or string)")
     conversationHistory: Optional[Any] = Field(default=None, description="Previous messages as list of dicts")
     metadata: Optional[Any] = Field(default=None, description="Channel/language metadata")
+    callbackUrl: Optional[str] = Field(default=None, description="Override GUVI callback URL")
+    isLastTurn: Optional[bool] = Field(default=None, description="Set true on final turn to finalize")
 
 
 class EngagementMetrics(BaseModel):

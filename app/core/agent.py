@@ -227,6 +227,33 @@ ELICITATION_ADDITIONS = [
 ]
 
 
+# Words that would break persona — strip if LLM hallucinates them in output
+SELF_IDENTIFYING_WORDS = [
+    "honeypot", "honey pot", "i am a bot", "i'm a bot", "i am an ai",
+    "i'm an ai", "i am artificial", "i'm artificial", "language model",
+    "i am not human", "i'm not human", "as an ai", "as a bot",
+    "i am programmed", "i'm programmed",
+]
+
+# Phrases to detect "are you a bot?" type accusations from scammer
+BOT_ACCUSATION_PATTERNS = [
+    "are you a bot", "are you an ai", "are you real", "are you human",
+    "is this a bot", "is this ai", "you sound like a bot", "you are a bot",
+    "you're a bot", "you are ai", "you're ai", "robot", "automated",
+    "this is fake", "you are fake", "who is this really", "are you a machine",
+    "talking to a computer", "is this automated", "honeypot",
+]
+
+# Responses for bot accusations — light humor, confusion, mild offense
+BOT_DEFENSE_RESPONSES = [
+    "Ha, a bot? No no, I'm just a regular person — honestly a bit offended you'd ask that! Anyway, you were saying something about my account?",
+    "I'm very much a real person, thank you! I'm just confused and worried about all this. Can you please tell me your employee ID so I can verify who I'm speaking with?",
+    "What? No, I'm just an ordinary person — I get nervous when people call about my bank account. Can you share your official number so I can call back and confirm this is real?",
+    "Of course I'm real — I'm just cautious, that's all. I've heard about scam calls, so I want to be careful. What's your name and employee number?",
+    "Ha, I'm definitely not a bot — I'm just slow with these things! My grandson handles all the tech stuff for me. Can you just confirm your employee ID for me?",
+]
+
+
 def _has_red_flag(text: str) -> bool:
     """Check if text contains recognizable red flag language."""
     text_lower = text.lower()
@@ -261,7 +288,7 @@ def _build_context_prompt(conversation_text: str, turn_number: int = 0,
         elif turn_number <= 6:
             parts.append(f"[Turn {turn_number}/10 — Dig deeper. Ask for account numbers, UPI, links, case IDs.]")
         else:
-            parts.append(f"[Turn {turn_number}/10 — Final turns. Get any missing data. Ask for alternative contacts.]")
+            parts.append(f"[Turn {turn_number}/10 — DESPERATION MODE. Use stalling excuses: 'my app crashed', 'OTP is not coming', 'let me check with my son', 'battery dying, give me your number'. Extract any missing data urgently.]")
 
     # Show what we already have
     if extracted_intel:
@@ -353,6 +380,21 @@ def generate_agent_reply(conversation_text: str, turn_number: int = 0,
         reply = call_llm(messages, temperature=0.75)
 
         # ============================================================
+        # PRE-PROCESSING: Check for bot accusation FIRST
+        # If the scammer is accusing us of being a bot, override with
+        # a human-sounding defensive reply instead of the LLM output.
+        # ============================================================
+        last_scammer_text = ""
+        for line in conversation_text.strip().split("\n")[-5:]:
+            if line.lower().startswith("scammer:"):
+                last_scammer_text = line.lower()
+
+        if any(p in last_scammer_text for p in BOT_ACCUSATION_PATTERNS):
+            defense = BOT_DEFENSE_RESPONSES[turn_number % len(BOT_DEFENSE_RESPONSES)]
+            logger.info("Bot accusation detected — using defense response")
+            return defense
+
+        # ============================================================
         # POST-PROCESSING PIPELINE
         # ============================================================
 
@@ -382,6 +424,15 @@ def generate_agent_reply(conversation_text: str, turn_number: int = 0,
 
         # Remove asterisk-based formatting
         reply = re.sub(r'\*+', '', reply).strip()
+
+        # Strip any self-identifying words that would break persona
+        reply_lower = reply.lower()
+        for word in SELF_IDENTIFYING_WORDS:
+            if word in reply_lower:
+                # Replace the problematic word with neutral text
+                import re as _re
+                reply = _re.sub(re.escape(word), "confused person", reply, flags=re.IGNORECASE)
+                logger.warning(f"Guardrail: stripped self-identifying word '{word}'")
 
         # ============================================================
         # GUARDRAIL 1: Ensure RED FLAG observation
