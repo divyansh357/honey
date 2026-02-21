@@ -553,11 +553,14 @@ def extract_intelligence(text: str) -> dict:
     try:
         urls = set(u.lower().rstrip(".,;:)") for u in URL_REGEX.findall(text))
 
-        # Also catch bare domain URLs
+        # Also catch bare domain URLs — but skip if the full-URL version
+        # (with http(s)://) is already captured, to avoid duplicates like
+        # "https://sbi-verify.com/portal" AND "sbi-verify.com/portal"
         bare_domains = BARE_DOMAIN_REGEX.findall(text)
+        existing_stripped = {u.split("://", 1)[1] if "://" in u else u for u in urls}
         for d in bare_domains:
             d_clean = d.lower().rstrip(".,;:)")
-            if d_clean and "." in d_clean:
+            if d_clean and "." in d_clean and d_clean not in existing_stripped:
                 urls.add(d_clean)
 
         # APK / malware links

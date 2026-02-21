@@ -359,6 +359,9 @@ def send_final_callback(session_id: str, session_data: dict) -> bool:
         "caseIds": intel.get("caseIds", []),
         "policyNumbers": intel.get("policyNumbers", []),
         "orderNumbers": intel.get("orderNumbers", []),
+        "ifscCodes": intel.get("ifscCodes", []),
+        "telegramIds": intel.get("telegramIds", []),
+        "remoteAccessTools": intel.get("remoteAccessTools", []),
     }
 
     # Calculate REAL engagement duration from session timestamps
